@@ -1,0 +1,6 @@
+# Single wall, 4m long, 1.15 degrees off horizontal. Z up.
+v 0 0 0
+v 4 0.08 0
+v 4 0.08 2.5
+v 0 0 2.5
+f 1 2 3 4
