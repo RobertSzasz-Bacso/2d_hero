@@ -5,7 +5,7 @@ import { displayFromMetres, metresFromDisplay } from "@/core/draw.ts"
 import { footOnLine } from "@/core/geom.ts"
 import { applyTypedDimension, moveVertex, moveWall, setOpening } from "@/core/ops.ts"
 import { pickAt } from "@/core/pick.ts"
-import type { Plan, Point } from "@/core/plan-types.ts"
+import type { Level, Plan, Point } from "@/core/plan-types.ts"
 import { extractRooms } from "@/core/rooms.ts"
 import { snapPoint } from "@/core/snap.ts"
 import { editorTolerances } from "@/core/tolerances.ts"
@@ -15,6 +15,7 @@ import { extendWall, placeColumn, placeFixture, placeOpening, placeSeparator, pl
 import { formatMetre, offsetAlongWall, openingEnds, segmentLength, wallAngleDeg } from "./metrics.ts"
 import { itemsInPlanRect, type SelectionItem } from "./select.ts"
 import { symbolPolylines } from "./symbols.ts"
+import UnderlayLayer from "./UnderlayLayer.tsx"
 import { useEditor } from "./store.ts"
 
 type SessionKind = "vertex" | "wall" | "opening" | "box" | "pan"
@@ -28,6 +29,11 @@ type Session = {
   moved: boolean
   shift: boolean
   stop: () => void
+}
+
+function shownLevel(plan: Plan): Level | undefined {
+  const id = useEditor.getState().activeLevelId
+  return plan.levels.find((level) => level.id === id) ?? plan.levels[0]
 }
 
 function localPoint(event: { clientX: number; clientY: number }, host: HTMLElement): Point {
@@ -103,7 +109,9 @@ export default function PlanCanvas() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  const level = plan?.levels[0]
+  const projectId = useEditor((state) => state.projectId)
+  const activeLevelId = useEditor((state) => state.activeLevelId)
+  const level = plan?.levels.find((item) => item.id === activeLevelId) ?? plan?.levels[0]
   const vertices = new Map(level?.vertices.map((vertex) => [vertex.id, vertex]) ?? [])
   const polygons = plan && level ? wallPolygons(plan, level.id) : []
 
@@ -187,6 +195,7 @@ export default function PlanCanvas() {
 
   return (
     <div ref={host} className="relative h-full w-full overflow-hidden bg-white" onPointerDown={onBackground} data-testid="plan-stage" data-tool={tool} data-symbol={symbol ?? ""}>
+      {projectId && level ? <UnderlayLayer projectId={projectId} levelId={level.id} /> : null}
       <div className="pointer-events-none absolute inset-0">
         {stage.width > 0 && stage.height > 0 ? (
           <Stage width={stage.width} height={stage.height} listening={false}>
@@ -499,7 +508,7 @@ export default function PlanCanvas() {
     const state = useEditor.getState()
     const raw = screenToPlan(state.camera, screen)
     const current = state.history?.plan
-    const levelNow = current?.levels[0]
+    const levelNow = current ? shownLevel(current) : undefined
     if (!current || !levelNow) {
       return raw
     }
@@ -523,18 +532,18 @@ export default function PlanCanvas() {
     const point = snappedPoint(screen)
     try {
       if (state.symbol) {
-        state.commit(placeFixture(current, state.symbol, point))
+        state.commit(placeFixture(current, state.symbol, point, state.activeLevelId))
         state.setTool("select")
         setToolError("")
         return
       }
       if (state.tool === "wall") {
         if (!state.wallChain) {
-          const started = startWall(current, point)
+          const started = startWall(current, point, state.activeLevelId)
           state.commit(started.plan)
           state.setWallChain(started.chain)
         } else {
-          const anchor = current.levels[0]?.vertices.find((vertex) => vertex.id === state.wallChain?.anchorId)
+          const anchor = shownLevel(current)?.vertices.find((vertex) => vertex.id === state.wallChain?.anchorId)
           if (!anchor) {
             return
           }
@@ -545,7 +554,7 @@ export default function PlanCanvas() {
             return
           }
           const angle = (Math.atan2(dy, dx) * 180) / Math.PI
-          const drawn = extendWall(current, state.wallChain, length, angle)
+          const drawn = extendWall(current, state.wallChain, length, angle, state.activeLevelId)
           state.commit(drawn.plan)
           state.setWallChain(drawn.chain)
         }
@@ -553,20 +562,20 @@ export default function PlanCanvas() {
         return
       }
       if (state.tool === "column") {
-        state.commit(placeColumn(current, point))
+        state.commit(placeColumn(current, point, state.activeLevelId))
       } else if (state.tool === "stair") {
-        state.commit(placeStair(current, point))
+        state.commit(placeStair(current, point, state.activeLevelId))
       } else if (state.tool === "text") {
-        state.commit(placeText(current, point))
+        state.commit(placeText(current, point, state.activeLevelId))
       } else if (state.tool === "separator") {
         if (!state.separatorStart) {
           state.setSeparatorStart(point)
         } else {
-          state.commit(placeSeparator(current, state.separatorStart, point))
+          state.commit(placeSeparator(current, state.separatorStart, point, state.activeLevelId))
           state.setSeparatorStart(null)
         }
       } else if (state.tool === "room") {
-        const levelNow = current.levels[0]
+        const levelNow = shownLevel(current)
         if (!levelNow) {
           return
         }
@@ -585,7 +594,7 @@ export default function PlanCanvas() {
     event.stopPropagation()
     const state = useEditor.getState()
     const current = state.history?.plan
-    const levelNow = current?.levels[0]
+    const levelNow = current ? shownLevel(current) : undefined
     const node = host.current
     if (!current || !levelNow || !node) {
       return
@@ -599,7 +608,7 @@ export default function PlanCanvas() {
       }
       const point = screenToPlan(state.camera, localPoint(event, node))
       try {
-        state.commit(placeOpening(current, wallId, state.tool, offsetAlongWall(a, b, point, 0.9)))
+        state.commit(placeOpening(current, wallId, state.tool, offsetAlongWall(a, b, point, 0.9), state.activeLevelId))
         setToolError("")
       } catch (caught) {
         setToolError(caught instanceof Error ? caught.message : "The opening was not placed.")
@@ -616,7 +625,7 @@ export default function PlanCanvas() {
       const point = screenToPlan(state.camera, localPoint(event, node))
       const foot = footOnLine(point, a, b)
       try {
-        state.commit(placeSplit(current, wallId, foot?.t ?? 0.5))
+        state.commit(placeSplit(current, wallId, foot?.t ?? 0.5, state.activeLevelId))
         setToolError("")
       } catch (caught) {
         setToolError(caught instanceof Error ? caught.message : "The wall was not split.")
@@ -637,7 +646,7 @@ export default function PlanCanvas() {
   ) {
     const state = useEditor.getState()
     const current = state.history?.plan
-    const levelNow = current?.levels[0]
+    const levelNow = current ? shownLevel(current) : undefined
     const metres = metresFromDisplay(Number(value), state.dimensionUnit)
     if (!current || !levelNow || !(metres > 0)) {
       setDimensionEdit(null)
@@ -656,7 +665,7 @@ export default function PlanCanvas() {
 
   function applySession(session: Session, screen: Point) {
     const state = useEditor.getState()
-    const levelNow = session.base.levels[0]
+    const levelNow = shownLevel(session.base)
     if (!levelNow) {
       return
     }
@@ -723,7 +732,7 @@ export default function PlanCanvas() {
       return
     }
     const planNow = state.history?.plan
-    const levelNow = planNow?.levels[0]
+    const levelNow = planNow ? shownLevel(planNow) : undefined
     if (!planNow || !levelNow) {
       return
     }

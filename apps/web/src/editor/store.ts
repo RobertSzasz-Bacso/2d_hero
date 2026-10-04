@@ -4,7 +4,7 @@ import { copySelection as copyItems, pasteClipboard, type Clipboard } from "@/co
 import { PlanHistory } from "@/core/history.ts"
 import { removeSelection } from "@/core/ops.ts"
 import type { Fixture, Plan, Point } from "@/core/plan-types.ts"
-import { boundsOfPoints, fitCamera, panCamera, zoomAtCursor, type Camera } from "@/view/camera.ts"
+import { boundsOfPoints, fitCamera, panCamera, zoomAtCursor, type Bounds, type Camera } from "@/view/camera.ts"
 import { heroFetch } from "@/session.ts"
 import type { WallChain } from "./draw-actions.ts"
 import { toggleItem, type SelectionItem } from "./select.ts"
@@ -48,6 +48,11 @@ type EditorState = {
   clipboard: Clipboard | null
   shortcutsOpen: boolean
   hideFurniture: boolean
+  activeLevelId: string
+  underlayVisible: boolean
+  underlayOpacity: number
+  show3d: boolean
+  underlayBounds: Bounds | null
   load: (projectId: string, plan: Plan) => void
   setLoadError: (message: string) => void
   setGrid: (gridM: number, unit: "cm" | "mm") => void
@@ -78,22 +83,27 @@ type EditorState = {
   setHideFurniture: (hide: boolean) => void
   copy: () => void
   paste: () => void
+  setActiveLevel: (id: string) => void
+  setUnderlayVisible: (visible: boolean) => void
+  setUnderlayOpacity: (opacity: number) => void
+  setShow3d: (show: boolean) => void
+  setUnderlayBounds: (bounds: Bounds | null) => void
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let saving = false
 let pending = false
 
-function levelId(plan: Plan): string | null {
-  return plan.levels[0]?.id ?? null
+function levelId(plan: Plan, activeLevelId: string): string | null {
+  return plan.levels.find((level) => level.id === activeLevelId)?.id ?? plan.levels[0]?.id ?? null
 }
 
 function decorate(plan: Plan): Plan {
-  const id = plan.levels[0]?.id
-  if (!id) {
-    return plan
+  let next = plan
+  for (const level of plan.levels) {
+    next = syncAutoDimensions(next, level.id)
   }
-  return syncAutoDimensions(plan, id)
+  return next
 }
 
 export const useEditor = create<EditorState>((set, get) => ({
@@ -118,6 +128,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   clipboard: null,
   shortcutsOpen: false,
   hideFurniture: false,
+  activeLevelId: "",
+  underlayVisible: true,
+  underlayOpacity: 0.55,
+  show3d: false,
+  underlayBounds: null,
   load: (projectId, plan) => {
     if (saveTimer) {
       clearTimeout(saveTimer)
@@ -134,6 +149,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       loadError: "",
       ready: true,
       dragging: false,
+      activeLevelId: plan.levels[0]?.id ?? "",
+      underlayBounds: null,
     })
     get().fit()
   },
@@ -158,12 +175,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   setSelection: (selection) => set({ selection }),
   toggleSelection: (item, shift) => set((state) => ({ selection: toggleItem(state.selection, item, shift) })),
   fit: () => {
-    const { history, stage } = get()
-    const level = history?.plan.levels[0]
-    if (!history || !level || stage.width < 10 || stage.height < 10) {
+    const { history, stage, activeLevelId, underlayBounds } = get()
+    const level = history?.plan.levels.find((item) => item.id === activeLevelId) ?? history?.plan.levels[0]
+    if (!history || stage.width < 10 || stage.height < 10) {
       return
     }
-    const bounds = boundsOfPoints(level.vertices)
+    const bounds = (level ? boundsOfPoints(level.vertices) : null) ?? underlayBounds
     if (!bounds) {
       return
     }
@@ -231,8 +248,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().saveNow()
   },
   deleteSelection: () => {
-    const { history, selection } = get()
-    const id = history ? levelId(history.plan) : null
+    const { history, selection, activeLevelId } = get()
+    const id = history ? levelId(history.plan, activeLevelId) : null
     if (!history || !id || selection.length === 0) {
       return
     }
@@ -261,17 +278,31 @@ export const useEditor = create<EditorState>((set, get) => ({
   setSeparatorStart: (separatorStart) => set({ separatorStart }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   setHideFurniture: (hideFurniture) => set({ hideFurniture }),
+  setActiveLevel: (id) => {
+    set({ activeLevelId: id, selection: [] })
+    get().fit()
+  },
+  setUnderlayVisible: (underlayVisible) => set({ underlayVisible }),
+  setUnderlayOpacity: (underlayOpacity) => set({ underlayOpacity }),
+  setShow3d: (show3d) => set({ show3d }),
+  setUnderlayBounds: (underlayBounds) => {
+    set({ underlayBounds })
+    const level = get().history?.plan.levels.find((item) => item.id === get().activeLevelId)
+    if (!level || level.vertices.length === 0) {
+      get().fit()
+    }
+  },
   copy: () => {
-    const { history, selection } = get()
-    const id = history ? levelId(history.plan) : null
+    const { history, selection, activeLevelId } = get()
+    const id = history ? levelId(history.plan, activeLevelId) : null
     if (!history || !id || selection.length === 0) {
       return
     }
     set({ clipboard: copyItems(history.plan, id, selection.map((item) => item.id)) })
   },
   paste: () => {
-    const { history, clipboard } = get()
-    const id = history ? levelId(history.plan) : null
+    const { history, clipboard, activeLevelId } = get()
+    const id = history ? levelId(history.plan, activeLevelId) : null
     if (!history || !id || !clipboard) {
       return
     }

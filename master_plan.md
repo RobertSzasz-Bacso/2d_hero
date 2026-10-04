@@ -428,7 +428,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-08
 
 ## Phase 9 — Import UI, underlays, 3D viewer
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 8 done.
 

@@ -6,14 +6,23 @@ from pathlib import Path
 
 
 def atomic_write_text(path: Path, text: str) -> None:
-    """Write text to a temp file, then ``os.replace`` it onto ``path``.
-
-    Windows can return access denied while a scanner still has the destination
-    open. Retry the replace. Do not delete the destination first.
-    """
+    """Write text to a temp file, then ``os.replace`` it onto ``path``."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.tmp")
     temporary.write_text(text, encoding="utf-8", newline="\n")
+    _replace(temporary, path)
+
+
+def atomic_write_bytes(path: Path, payload: bytes) -> None:
+    """Write bytes to a temp file, then ``os.replace`` it onto ``path``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.tmp")
+    temporary.write_bytes(payload)
+    _replace(temporary, path)
+
+
+def _replace(temporary: Path, path: Path) -> None:
+    """Windows can deny the replace while a scanner still has the destination open."""
     try:
         for attempt in range(20):
             try:

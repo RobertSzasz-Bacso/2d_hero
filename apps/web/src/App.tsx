@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button.tsx";
 import Editor from "./editor/Editor.tsx";
+import ImportPanel from "./editor/ImportPanel.tsx";
 import { heroFetch } from "./session.ts";
 import Settings from "./settings.tsx";
 
@@ -84,6 +85,7 @@ export default function App() {
     <main className="flex min-h-svh flex-col items-start gap-4 p-8">
       <Button type="button">2D Hero</Button>
       <p>Health: {health}</p>
+      <ImportPanel onOpen={openProject} />
       <section className="flex w-full max-w-lg flex-col gap-2">
         <h2 className="text-sm font-medium">Projects</h2>
         {projects.length === 0 ? <p className="text-sm text-slate-500">No recent projects.</p> : null}

@@ -11,6 +11,9 @@ from hero.atomic import atomic_write_text
 from hero.ingest.read import read_source
 from hero.pipeline.cloud import write_cloud
 from hero.pipeline.normalize import normalize_scene
+from hero.pipeline.preview import write_preview
+from hero.pipeline.shells import write_level_shells
+from hero.pipeline.underlay import write_underlays
 from hero.projects import LinkedFileMissing
 
 _lock = threading.Lock()
@@ -24,32 +27,32 @@ class JobBusy(Exception):
 
 
 def execute_import(project_dir: str, units: str, up_axis: str) -> dict[str, str]:
-    """Run ingest, normalize, and levels. Cancel is checked between stages."""
+    """Run ingest through preview. Cancel between stages does not write the plan."""
     folder = Path(project_dir)
     if _cancelled(folder):
         _write_state(folder, "cancelled", "ingest", 0, "")
         return {"state": "cancelled"}
     try:
         source = source_file(folder)
-        _write_state(folder, "running", "ingest", 15, "")
-        _wait_hold(folder)
-        if _cancelled(folder):
-            _write_state(folder, "cancelled", "ingest", 15, "")
+        if _stop(folder, "ingest", 10):
             return {"state": "cancelled"}
         scene = read_source(source)
-        _write_state(folder, "running", "normalize", 45, "")
-        _wait_hold(folder)
-        if _cancelled(folder):
-            _write_state(folder, "cancelled", "normalize", 45, "")
+        if _stop(folder, "normalize", 30):
             return {"state": "cancelled"}
         result = normalize_scene(scene, units=units, up_axis=up_axis)
-        _write_state(folder, "running", "levels", 80, "")
-        _wait_hold(folder)
-        if _cancelled(folder):
-            _write_state(folder, "cancelled", "levels", 80, "")
+        if _stop(folder, "levels", 50):
             return {"state": "cancelled"}
         write_cloud(folder / "cloud.bin", result)
-        _write_state(folder, "done", "levels", 100, "")
+        if _stop(folder, "underlay", 70):
+            return {"state": "cancelled"}
+        write_underlays(folder, result)
+        if _stop(folder, "preview", 75):
+            return {"state": "cancelled"}
+        write_preview(source, folder, result)
+        if _stop(folder, "shells", 90):
+            return {"state": "cancelled"}
+        write_level_shells(folder, result, up_axis=up_axis)
+        _write_state(folder, "done", "preview", 100, "")
     except Exception as exc:
         _write_state(folder, "error", "ingest", 0, str(exc))
         return {"state": "error", "error": str(exc)}
@@ -137,6 +140,16 @@ def _pool() -> ProcessPoolExecutor:
 def _release(_future: Future[dict[str, str]]) -> None:
     if _lock.locked():
         _lock.release()
+
+
+def _stop(folder: Path, stage: str, progress: int) -> bool:
+    """Record the stage, then honour a cancel request before the stage runs."""
+    _write_state(folder, "running", stage, progress, "")
+    _wait_hold(folder)
+    if _cancelled(folder):
+        _write_state(folder, "cancelled", stage, progress, "")
+        return True
+    return False
 
 
 def _cancelled(folder: Path) -> bool:

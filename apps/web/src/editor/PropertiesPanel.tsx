@@ -7,7 +7,8 @@ import { useEditor } from "./store.ts"
 export default function PropertiesPanel() {
   const plan = useEditor((state) => state.history?.plan ?? null)
   const selection = useEditor((state) => state.selection)
-  const level = plan?.levels[0]
+  const activeLevelId = useEditor((state) => state.activeLevelId)
+  const level = plan?.levels.find((item) => item.id === activeLevelId) ?? plan?.levels[0]
   const item = selection.length === 1 ? selection[0] : undefined
 
   return (

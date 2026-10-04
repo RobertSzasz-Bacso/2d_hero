@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from json import JSONDecodeError
@@ -16,12 +17,13 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from sse_starlette.sse import EventSourceResponse
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse
 
 from hero.dialogs import ask_open_file
 from hero.jobs import JobBusy, cancel_job, job_snapshot, shutdown_pool, source_file, start_import
 from hero.keystore import cursor_key_is_set, delete_cursor_key, set_cursor_key
 from hero.paths import app_config_dir, default_projects_dir, web_dist
+from hero.pipeline.guess import guess_source
 from hero.projects import (
     FileTooLarge,
     LinkedFileMissing,
@@ -35,6 +37,8 @@ from hero.session_file import write_token
 from hero.settings_store import AppSettings, SettingsStore
 
 logger = logging.getLogger("hero")
+
+_UNSAFE_IMAGE = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,40}\.png$")
 
 _CORS_ORIGINS = [
     "http://127.0.0.1:5173",
@@ -283,6 +287,67 @@ def create_app(
         if not cancel_job(job_id):
             return JSONResponse({"detail": "Job was not found."}, status_code=404)
         return JSONResponse({"state": "cancelled"})
+
+    @app.get("/api/projects/{project_id}/guess")
+    def guess_project(project_id: str) -> JSONResponse:
+        try:
+            folder = project_store().project_dir(project_id)
+            source = source_file(folder)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        except LinkedFileMissing as exc:
+            return JSONResponse(
+                {"detail": f"The linked file is missing: {exc.path}"},
+                status_code=400,
+            )
+        except (FileNotFoundError, OSError):
+            return JSONResponse({"detail": "Source file is missing."}, status_code=400)
+        try:
+            return JSONResponse(guess_source(source))
+        except Exception:
+            logger.exception("Could not guess units for %s", project_id)
+            return JSONResponse({"detail": "This file could not be read."}, status_code=400)
+
+    @app.get("/api/projects/{project_id}/underlay/frames.json")
+    def underlay_frames(project_id: str) -> JSONResponse:
+        try:
+            folder = project_store().project_dir(project_id)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        path = folder / "underlay" / "frames.json"
+        if not path.is_file():
+            return JSONResponse({"detail": "No underlay yet."}, status_code=404)
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            return JSONResponse({"detail": "No underlay yet."}, status_code=404)
+        return JSONResponse(loaded)
+
+    @app.get("/api/projects/{project_id}/underlay/{image_name}", response_model=None)
+    def underlay_image(project_id: str, image_name: str) -> FileResponse | JSONResponse:
+        if _UNSAFE_IMAGE.fullmatch(image_name) is None:
+            return JSONResponse({"detail": "Underlay was not found."}, status_code=404)
+        try:
+            folder = project_store().project_dir(project_id)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        path = folder / "underlay" / image_name
+        if not path.is_file():
+            return JSONResponse({"detail": "Underlay was not found."}, status_code=404)
+        return FileResponse(path, media_type="image/png")
+
+    @app.get("/api/projects/{project_id}/preview", response_model=None)
+    def project_preview(project_id: str) -> FileResponse | JSONResponse:
+        try:
+            folder = project_store().project_dir(project_id)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        glb = folder / "preview.glb"
+        if glb.is_file():
+            return FileResponse(glb, media_type="model/gltf-binary")
+        points = folder / "preview.pts"
+        if points.is_file():
+            return FileResponse(points, media_type="application/octet-stream")
+        return JSONResponse({"detail": "Preview is not ready."}, status_code=404)
 
     static_dir = web_dist() if dist_dir is None else dist_dir
     if static_dir.is_dir():

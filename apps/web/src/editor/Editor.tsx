@@ -1,13 +1,16 @@
 import { useEffect } from "react"
 import { Button } from "@/components/ui/button.tsx"
-import type { Plan } from "@/core/plan-types.ts"
+import type { Level, Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
 import ExportDialog from "./ExportDialog.tsx"
 import PlanCanvas from "./PlanCanvas.tsx"
 import PropertiesPanel from "./PropertiesPanel.tsx"
 import Shortcuts from "./Shortcuts.tsx"
 import Toolbar from "./Toolbar.tsx"
+import View3D from "./View3D.tsx"
 import { useEditor } from "./store.ts"
+
+const noLevels: Level[] = []
 
 export default function Editor({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const ready = useEditor((state) => state.ready && state.projectId === projectId)
@@ -15,6 +18,12 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
   const saveStatus = useEditor((state) => state.saveStatus)
   const saveError = useEditor((state) => state.saveError)
   const planName = useEditor((state) => state.history?.plan.project.name ?? "")
+  const levels = useEditor((state) => state.history?.plan.levels ?? noLevels)
+  const activeLevelId = useEditor((state) => state.activeLevelId)
+  const underlayVisible = useEditor((state) => state.underlayVisible)
+  const underlayOpacity = useEditor((state) => state.underlayOpacity)
+  const show3d = useEditor((state) => state.show3d)
+  const elevation = levels.find((level) => level.id === activeLevelId)?.elevation ?? levels[0]?.elevation ?? 0
 
   useEffect(() => {
     const controller = new AbortController()
@@ -141,6 +150,43 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
         <span className="ml-auto text-sm" data-testid="save-status">
           {ready ? saveStatus : "Loading"}
         </span>
+        {levels.length > 1 ? (
+          <select
+            data-testid="level-switcher"
+            className="h-8 rounded border border-slate-300 px-2 text-sm"
+            value={activeLevelId}
+            onChange={(event) => useEditor.getState().setActiveLevel(event.target.value)}
+          >
+            {levels.map((level) => (
+              <option key={level.id} value={level.id}>
+                {level.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          data-testid="underlay-toggle"
+          onClick={() => useEditor.getState().setUnderlayVisible(!underlayVisible)}
+        >
+          {underlayVisible ? "Hide underlay" : "Show underlay"}
+        </Button>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          Fade
+          <input
+            data-testid="underlay-fade"
+            type="range"
+            min={0.1}
+            max={1}
+            step={0.05}
+            value={underlayOpacity}
+            onChange={(event) => useEditor.getState().setUnderlayOpacity(Number(event.target.value))}
+          />
+        </label>
+        <Button type="button" variant="outline" data-testid="toggle-3d" onClick={() => useEditor.getState().setShow3d(!show3d)}>
+          3D
+        </Button>
         <Button type="button" variant="outline" data-testid="fit" onClick={() => useEditor.getState().fit()}>
           Fit
         </Button>
@@ -155,6 +201,7 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
       <div className="relative flex min-h-0 flex-1">
         <Toolbar />
         <PlanCanvas />
+        {show3d ? <View3D projectId={projectId} elevation={elevation} /> : null}
         <PropertiesPanel />
         <Shortcuts />
       </div>
