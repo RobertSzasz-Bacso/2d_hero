@@ -11,7 +11,7 @@ from hero.atomic import atomic_write_text
 from hero.ingest.read import read_source
 from hero.pipeline.cloud import write_cloud
 from hero.pipeline.normalize import normalize_scene
-from hero.pipeline.planwrite import write_detected_plan
+from hero.pipeline.planwrite import write_detected_plan, write_imported_plan
 from hero.pipeline.preview import write_preview
 from hero.pipeline.surfaces import detect_surfaces
 from hero.pipeline.underlay import write_underlays
@@ -50,12 +50,17 @@ def execute_import(project_dir: str, units: str, up_axis: str) -> dict[str, str]
         if _stop(folder, "preview", 75):
             return {"state": "cancelled"}
         write_preview(source, folder, result)
-        if _stop(folder, "wall surfaces", 88):
-            return {"state": "cancelled"}
-        surfaces = detect_surfaces(result)
-        if _stop(folder, "wall graph", 95):
-            return {"state": "cancelled"}
-        write_detected_plan(folder, result, surfaces, up_axis=up_axis)
+        if source.suffix.lower() == ".ifc":
+            if _stop(folder, "ifc", 90):
+                return {"state": "cancelled"}
+            write_imported_plan(folder, result, source, up_axis=up_axis)
+        else:
+            if _stop(folder, "wall surfaces", 88):
+                return {"state": "cancelled"}
+            surfaces = detect_surfaces(result)
+            if _stop(folder, "wall graph", 95):
+                return {"state": "cancelled"}
+            write_detected_plan(folder, result, surfaces, up_axis=up_axis)
         _write_state(folder, "done", "preview", 100, "")
     except Exception as exc:
         _write_state(folder, "error", "ingest", 0, str(exc))

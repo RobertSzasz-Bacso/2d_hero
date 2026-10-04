@@ -30,7 +30,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 11 — Wall graph and rooms — `done`
 - [x] Phase 12 — Openings, columns, stairs — `done`
 - [x] Phase 13 — Fixtures and furniture — `done`
-- [ ] Phase 14 — IFC import — `not started`
+- [x] Phase 14 — IFC import — `done`
 - [ ] Phase 15 — AI assistant — `not started`
 - [ ] Phase 16 — Hardening and release — `not started`
 - [ ] Phase 17 — Optional machine-learning detectors — `not started`
@@ -636,7 +636,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-13
 
 ## Phase 14 — IFC import
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 13 done.
 

@@ -85,6 +85,34 @@ def write_detected_plan(folder: Path, result: Normalized, surfaces: SurfaceResul
     atomic_write_text(plan_path, dump_plan(plan))
 
 
+def write_imported_plan(folder: Path, result: Normalized, source: Path, *, up_axis: str) -> None:
+    """Write a plan from IFC objects. The mesh wall detector is not used."""
+    from hero.pipeline.ifcimport import read_ifc_plan
+
+    plan_path = folder / "plan.json"
+    plan = Plan.model_validate_json(plan_path.read_text(encoding="utf-8"))
+    meta = json.loads((folder / "project.json").read_text(encoding="utf-8"))
+    filename = meta.get("sourceFileName")
+    name = filename if isinstance(filename, str) and filename else source.name
+    linked = meta.get("linkedPath")
+    axis = up_axis if up_axis in {"x", "y", "z"} else "xyz"[int(np_argmax_abs(result.estimated_up))]
+    levels, issues = read_ifc_plan(source)
+    plan.levels = levels or plan.levels
+    plan.detection = Detection(
+        source=DetectionSource(
+            filename=name,
+            format="ifc",
+            unitScaleToMeters=result.unit_scale if result.unit_scale > 0 else 1.0,
+            upAxis=axis,  # type: ignore[arg-type]
+            manhattanAngleDeg=result.manhattan_angle_deg,
+            linked=isinstance(linked, str) and bool(linked),
+        ),
+        issues=_issues([*result.issues, *issues]),
+    )
+    plan.revision += 1
+    atomic_write_text(plan_path, dump_plan(plan))
+
+
 def scan_plan(result: Normalized) -> Plan:
     """Editable plan for one normalized scene, including openings and fixtures."""
     drafts, surfaces = detect_plan(result)
