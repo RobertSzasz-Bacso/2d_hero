@@ -469,7 +469,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-09
 
 ## Phase 10 — Wall surfaces
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 9 done.
 

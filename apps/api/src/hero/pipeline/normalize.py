@@ -354,7 +354,11 @@ def _manhattan(points: np.ndarray, normals: np.ndarray) -> tuple[np.ndarray, np.
         return points, normals, 0.0
     angles = np.degrees(np.arctan2(normals[horizontal, 1], normals[horizontal, 0])) % 180.0
     hist, edges = np.histogram(angles, bins=180, range=(0.0, 180.0))
-    strongest = float((edges[int(np.argmax(hist))] + edges[int(np.argmax(hist)) + 1]) / 2.0)
+    peak = int(np.argmax(hist))
+    in_bin = (angles >= edges[peak]) & (angles < edges[peak + 1])
+    strongest = float(np.mean(angles[in_bin])) if int(in_bin.sum()) else float(edges[peak])
+    # 0° and 180° are the same axis. Keep the turn inside (-90°, 90°] so the plan does not flip.
+    strongest = ((strongest + 90.0) % 180.0) - 90.0
     radians = np.deg2rad(-strongest)
     cosine = float(np.cos(radians))
     sine = float(np.sin(radians))
