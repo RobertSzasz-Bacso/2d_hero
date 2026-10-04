@@ -19,7 +19,7 @@ Status values: `not started`, `in progress`, `done`.
 
 - [x] Phase 1 — Foundation reset — `done`
 - [x] Phase 2 — Persistence and secure settings — `done`
-- [ ] Phase 3 — Editor core — `not started`
+- [x] Phase 3 — Editor core — `done`
 - [ ] Phase 4 — Editor canvas — `not started`
 - [ ] Phase 5 — Editor drawing tools — `not started`
 - [ ] Phase 6 — Construction drawing and PDF — `not started`
@@ -164,7 +164,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-02
 
 ## Phase 3 — Editor core
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 2 done.
 
@@ -180,7 +180,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-02
 
 **Tests first** (Vitest, no DOM)
 
-- A 5.00 m by 4.00 m rectangle, wall thickness 0.20 m, has net room area 4.60 * 3.60 = 16.56 m² within 0.01, and gross centerline area is not used.
+- A 5.00 m by 4.00 m rectangle, wall thickness 0.20 m, has net room area (5.00 − 0.20) × (4.00 − 0.20) = 18.24 m² within 0.01, and gross centerline area is not used.
 - L, T, and X joints produce closed polygons with no spike longer than 3 times the thickness.
 - An open gap of 4 cm snaps closed. A gap of 20 cm stays open.
 - `moveWall` on a rectangle's south wall by 0.10 m north keeps the east and west walls orthogonal and changes only the depth.
@@ -199,7 +199,7 @@ Read first: AGENTS.md, docs/handoff/phase-02.md, master_plan.md (Phase 3), docs/
 
 Write a pure TypeScript kernel in apps/web/src/core/. No React, no Konva, no three.js. Wall joins, net rooms, domain ops, immer undo, rbush picking, and snapping must follow docs/algorithms.md. Put numeric tolerances in one module.
 
-Write shared/vectors/*.json first and Vitest tests that load them. Run the tests and keep the failures. Then implement until the Phase 3 cases pass, including the 5.00 by 4.00 m room at 16.56 m² net.
+Write shared/vectors/*.json first and Vitest tests that load them. Run the tests and keep the failures. Then implement until the Phase 3 cases pass, including the 5.00 by 4.00 m room at 18.24 m² net.
 
 Do not port the kernel to Python in this phase. Do not build UI.
 

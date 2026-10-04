@@ -74,3 +74,8 @@ Reason: The settings spec names the grid field and not its default. `json-schema
 
 Decision: `ruff` and `pyright` are dev dependencies of `apps/api`. The Vite React template keeps `oxlint`. The web app keeps every package `shadcn init` installed (`tailwindcss`, `@tailwindcss/vite`, `radix-ui`, `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, `@fontsource-variable/geist`, and the `shadcn` CLI package). Tests keep using `httpx`.
 Reason: `docs/testing.md` requires `check.ps1` to run ruff and pyright. `docs/libraries.md` says to initialize shadcn/ui with its CLI, and that CLI installed those packages for the radix-nova preset. Starlette warns that `httpx` is deprecated in favor of `httpx2`; `httpx2` is not on the library list.
+
+## 2026-10-04 — Net area of the 5 m by 4 m example
+
+Decision: The schema example, centerlines at 0 and 5 by 0 and 4 with wall thickness 0.20 m, has net area 18.24 m². That is (5.00 − 0.20) × (4.00 − 0.20).
+Reason: Walls are centred on the centerline and offset by thickness / 2, so the clear span loses half a thickness on each side. The earlier 16.56 m² figure subtracted the full thickness twice. The measured hole is 4.80 × 3.80 m.

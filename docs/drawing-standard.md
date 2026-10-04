@@ -77,7 +77,7 @@ A typed value edits geometry (see `docs/algorithms.md`). It does not only change
 
 ## Room tags
 
-Centered on the net room polygon, stacked: name, number, area with one decimal and `m²` (`16.6 m²`). If the name is empty, show `Room`. The tag must not be stored back into the plan as a text element.
+Centered on the net room polygon, stacked: name, number, area with one decimal and `m²` (`18.2 m²`). If the name is empty, show `Room`. The tag must not be stored back into the plan as a text element.
 
 ## Columns, stairs, fixtures
 

@@ -1,0 +1,139 @@
+{
+  "name": "room-seed-lost",
+  "op": "rooms",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Seed lost",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [
+            {
+              "id": "v1",
+              "x": 0,
+              "y": 0
+            },
+            {
+              "id": "v2",
+              "x": 5,
+              "y": 0
+            },
+            {
+              "id": "v3",
+              "x": 5,
+              "y": 4
+            },
+            {
+              "id": "v4",
+              "x": 0,
+              "y": 4
+            }
+          ],
+          "walls": [
+            {
+              "id": "w1",
+              "a": "v1",
+              "b": "v2",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w2",
+              "a": "v2",
+              "b": "v3",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w3",
+              "a": "v3",
+              "b": "v4",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w4",
+              "a": "v4",
+              "b": "v1",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            }
+          ],
+          "openings": [
+            {
+              "id": "o1",
+              "wall": "w1",
+              "kind": "door",
+              "offset": 0.5,
+              "width": 0.9,
+              "sill": 0,
+              "head": 2.1,
+              "swing": "left",
+              "swingSide": "positive",
+              "confidence": 1
+            }
+          ],
+          "columns": [],
+          "stairs": [],
+          "rooms": [
+            {
+              "id": "r1",
+              "name": "Room",
+              "number": "01",
+              "seed": {
+                "x": 2.5,
+                "y": -0.5
+              }
+            }
+          ],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1"
+  },
+  "expect": {
+    "areas": [],
+    "areaTolerance": 0.01,
+    "issueCodes": [
+      "room_seed_lost"
+    ]
+  }
+}

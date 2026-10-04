@@ -1,0 +1,174 @@
+{
+  "name": "separator-split",
+  "op": "rooms",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Split",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [
+            {
+              "id": "v1",
+              "x": 0,
+              "y": 0
+            },
+            {
+              "id": "vS",
+              "x": 2.5,
+              "y": 0
+            },
+            {
+              "id": "v2",
+              "x": 5,
+              "y": 0
+            },
+            {
+              "id": "v3",
+              "x": 5,
+              "y": 4
+            },
+            {
+              "id": "vN",
+              "x": 2.5,
+              "y": 4
+            },
+            {
+              "id": "v4",
+              "x": 0,
+              "y": 4
+            }
+          ],
+          "walls": [
+            {
+              "id": "w1",
+              "a": "v1",
+              "b": "vS",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w1b",
+              "a": "vS",
+              "b": "v2",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w2",
+              "a": "v2",
+              "b": "v3",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w3",
+              "a": "v3",
+              "b": "vN",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w3b",
+              "a": "vN",
+              "b": "v4",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w4",
+              "a": "v4",
+              "b": "v1",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            }
+          ],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [
+            {
+              "id": "rW",
+              "name": "West",
+              "number": "01",
+              "seed": {
+                "x": 1.2,
+                "y": 2
+              }
+            },
+            {
+              "id": "rE",
+              "name": "East",
+              "number": "02",
+              "seed": {
+                "x": 3.8,
+                "y": 2
+              }
+            }
+          ],
+          "separators": [
+            {
+              "id": "s1",
+              "a": "vS",
+              "b": "vN"
+            }
+          ],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1"
+  },
+  "expect": {
+    "areas": [
+      {
+        "id": "rW",
+        "area": 9.12
+      },
+      {
+        "id": "rE",
+        "area": 9.12
+      }
+    ],
+    "areaTolerance": 0.01,
+    "issueCodes": []
+  }
+}

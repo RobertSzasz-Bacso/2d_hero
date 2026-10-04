@@ -1,0 +1,74 @@
+{
+  "name": "snap-angle",
+  "op": "snap",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Angle",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "cursor": {
+      "x": 2,
+      "y": 0.03
+    },
+    "pixelsPerMeter": 100,
+    "gridM": 0.01,
+    "previous": {
+      "x": 0,
+      "y": 0,
+      "dirX": 1,
+      "dirY": 0
+    }
+  },
+  "expect": {
+    "kind": "angle",
+    "point": {
+      "x": 2,
+      "y": 0
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "name": "join-t",
+  "op": "wallPolygons",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "T",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [
+            {
+              "id": "v1",
+              "x": 0,
+              "y": 0
+            },
+            {
+              "id": "v2",
+              "x": 4,
+              "y": 0
+            },
+            {
+              "id": "v3",
+              "x": 2,
+              "y": 2
+            },
+            {
+              "id": "v4",
+              "x": 2,
+              "y": 0.03
+            }
+          ],
+          "walls": [
+            {
+              "id": "wHost",
+              "a": "v1",
+              "b": "v2",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "wButt",
+              "a": "v3",
+              "b": "v4",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            }
+          ],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1"
+  },
+  "expect": {
+    "closed": true,
+    "maxSpikeFactor": 3,
+    "buttId": "wButt",
+    "hostId": "wHost"
+  }
+}

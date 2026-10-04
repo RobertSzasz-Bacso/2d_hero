@@ -268,7 +268,7 @@ Reject the plan when:
 }
 ```
 
-Net room area of this example is 4.60 × 3.60 = 16.56 m².
+Net room area of this example is (5.00 − 0.20) × (4.00 − 0.20) = 4.80 × 3.80 = 18.24 m². Thickness is centred on the centerline, so each side loses half the wall thickness.
 
 ## Invalid examples
 

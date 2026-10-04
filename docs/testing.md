@@ -50,7 +50,7 @@ uv run pytest tests\test_thickness.py -q
   "name": "rectangle-net-area",
   "op": "rooms",
   "input": { },
-  "expect": { "area": 16.56, "areaTolerance": 0.01 }
+  "expect": { "area": 18.24, "areaTolerance": 0.01 }
 }
 ```
 

@@ -275,7 +275,7 @@ At a corner, intersect this wall's left offset with the neighbor's matching offs
 
 A T-junction is an endpoint that lands on another wall's interior, within `join_snap_m` of that centerline and not only at its ends. Extend the butt wall to the host centerline, build both polygons, then subtract the host polygon from the butt so the butt stops at the host face.
 
-The union of the four wall polygons of the 5.00 × 4.00 m example, thickness 0.20 m, leaves a free rectangle of 4.60 × 3.60 m.
+The union of the four wall polygons of the 5.00 × 4.00 m example, thickness 0.20 m, leaves a free rectangle of 4.80 × 3.80 m. Each wall is centred on its centerline, so the clear span is the centerline span minus one thickness, not two.
 
 ### Rooms
 
