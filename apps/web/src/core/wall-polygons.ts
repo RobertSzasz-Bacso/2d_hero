@@ -178,9 +178,14 @@ export function wallPolygons(plan: Plan, levelId: string): WallPolygon[] {
     joinCluster(level, geomEnd, cluster, corners)
   }
 
+  const hub = (wallId: string, end: EndName): Point | null => {
+    const cluster = clusterByEnd.get(`${wallId}:${end}`)
+    return cluster && !cluster.host && cluster.ends.length >= 3 ? cluster.joint : null
+  }
+
   const polygons: WallPolygon[] = []
   for (const wall of level.walls) {
-    const ring = squareOrJoined(wall, geomEnd, corners.get(wall.id) as Corners)
+    const ring = squareOrJoined(wall, geomEnd, hub, corners.get(wall.id) as Corners)
     if (ring) {
       polygons.push({ wallId: wall.id, ring })
     }
@@ -235,7 +240,16 @@ function ringArea(ring: Point[]): number {
   return sum / 2
 }
 
-function squareOrJoined(wall: Wall, geomEnd: (wallId: string, end: EndName) => Point, corners: Corners): Point[] | null {
+/**
+ * Where three or more walls meet, each ring passes through the joint so the
+ * union has no gap between collinear neighbours.
+ */
+function squareOrJoined(
+  wall: Wall,
+  geomEnd: (wallId: string, end: EndName) => Point,
+  hub: (wallId: string, end: EndName) => Point | null,
+  corners: Corners,
+): Point[] | null {
   const a = geomEnd(wall.id, "a")
   const b = geomEnd(wall.id, "b")
   const direction = unit(sub(b, a))
@@ -249,11 +263,15 @@ function squareOrJoined(wall: Wall, geomEnd: (wallId: string, end: EndName) => P
     const sign = side === "left" ? 1 : -1
     return add(origin, mul(normal, sign * half))
   }
+  const hubA = hub(wall.id, "a")
+  const hubB = hub(wall.id, "b")
   const ring = dedupeRing([
     corners.a.right ?? cap("a", "right"),
     corners.b.right ?? cap("b", "right"),
+    ...(hubB ? [hubB] : []),
     corners.b.left ?? cap("b", "left"),
     corners.a.left ?? cap("a", "left"),
+    ...(hubA ? [hubA] : []),
   ])
   return ring.length >= 3 ? ring : null
 }

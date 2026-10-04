@@ -101,7 +101,7 @@ export default function App() {
           </div>
         </div>
         <span className="hidden rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-[11px] text-cyan-50 md:inline">
-          Phases 1–16 shipped · Phase 17 in design
+          Phases 1–16 shipped · Phases 17–20 planned
         </span>
         <nav className="ml-auto flex items-center gap-2" aria-label="Stages">
           {stages.map((item, itemIndex) => (

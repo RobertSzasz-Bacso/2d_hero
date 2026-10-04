@@ -106,7 +106,7 @@ One Windows PC. Python 3.12 does the geometry. The browser is the editor and wri
 | --- | --- | --- | --- |
 | React, Vite, TypeScript | UI and build. | The editor is a local page. Vite proxies `/api` in development. | A desktop shell such as Tauri. The decision is to stay a browser plus a shortcut. |
 | Tailwind, shadcn/ui | Layout and controls. | One look for Settings, the import screen, and the editor. The CLI also brought Radix, `class-variance-authority`, `cn`, Lucide icons, the Geist font, and `tw-animate-css`. | A second component kit. The rule is to keep this one. |
-| Konva, react-konva | 2D canvas. | Walls, hits, and drag. Plan Y stays up. Screen Y flips only in the camera. | SVG for the live editor. Fine for the AI snapshot, heavy for dragging. |
+| SVG in React (no library) | 2D plan view. | Draws the same scene as the PDF: black walls, door swings, symbols. Each element is its own hit shape. Plan Y stays up. Screen Y flips only in the camera. | Konva, used up to Phase 16. It drew placeholder graphics behind floating HTML buttons. |
 | three.js, React Three Fiber, drei | 3D panel. | Orbit a decimated GLB or a capped point cloud, with the cut plane. | A hand-written WebGL view. More code for the same fit-and-orbit. |
 | Immer | Immutable patches. | Undo and redo, capped at 100. Accepting an assistant proposal is one step. | Storing a full copy of the plan on every edit. |
 | rbush | Spatial index. | Click and box selection without scanning every wall. | A grid. RBush already matches the snap tolerances. |
@@ -124,7 +124,7 @@ These are not built. The classic pipeline stays the default either way.
 - **Notice a changed link.** A missing linked file is already an error. A file that stayed at the same path but changed size or time should ask before the old plan is trusted.
 - **One running app.** Two Desktop shortcuts can open two processes on different ports and write one project folder. A single-instance lock would send the second launch to the window that is already open.
 - **Fall back when `plan.json` is unreadable.** `plan.prev.json` and the revision snapshots exist. Startup should load the previous good plan and say so when the current file fails the schema.
-- **Disagreement, not a second plan.** The optional Phase 17 detector, still not started, should file issues where it differs from the classic walls. It should not replace them.
+- **Disagreement, not a second plan.** The optional Phase 20 detector, still not started, should file issues where it differs from the classic walls. It should not replace them.
 - **Record stage time and voxel size on the job.** A slow or huge site is then visible in `job.json` without a profiler.
 - **Tape check inside the project.** Samples already assert known lengths when a manifest is present. A length the owner types on a wall, checked again after edits, would catch a bad drag on a real job.
 - **Rebuild a stale underlay.** The PNG is not geometry. If the level elevation changes, the image should be written again so the trace matches the cut.

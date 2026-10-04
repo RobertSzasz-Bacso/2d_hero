@@ -165,6 +165,7 @@ describe("drawing compiler", () => {
       return
     }
     const svg = renderSvg(sheet)
+    expect(svg).not.toContain("fill-opacity")
     const golden = path.join(goldenDir, "golden", "two-room.svg")
     if (process.env.UPDATE_SVG === "1") {
       mkdirSync(path.dirname(golden), { recursive: true })
@@ -190,6 +191,7 @@ describe("drawing compiler", () => {
 
     const latin = Buffer.from(bytes).toString("latin1")
     expect(latin.includes("/Subtype /Image") || latin.includes("/Subtype/Image")).toBe(false)
+    expect(latin).not.toMatch(/\/ca\s+0?\.35/)
 
     const content = pageContent(doc)
     expect(content).toMatch(/(^|\s)m(\s|$)/)

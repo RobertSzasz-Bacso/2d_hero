@@ -52,12 +52,12 @@ test("fit, drag a corner, undo, and drag a wall without saving during the move",
       puts.push(Date.now())
     }
   })
-  const south = page.locator('[data-wall-id="wSouth"]')
+  const south = page.locator('path[data-wall-id="wSouth"]')
   const box = await south.boundingBox()
   if (!box) {
-    throw new Error("South wall handle is missing")
+    throw new Error("South wall is missing")
   }
-  const x = box.x + box.width / 2
+  const x = box.x + box.width * 0.25
   const y = box.y + box.height / 2
   await page.mouse.move(x, y)
   const moveStarted = Date.now()

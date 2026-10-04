@@ -24,7 +24,7 @@ export function renderSvg(sheet: CompiledSheet): string {
       const path = command.rings
         .map((ring) => `${move(ring, sheet.heightMm)} Z`)
         .join(" ")
-      return `<path d="${path}" fill="#000" fill-opacity="${command.opacity}" fill-rule="evenodd" stroke="none"/>`
+      return `<path d="${path}" fill="#000" fill-rule="evenodd" stroke="none"/>`
     }
     if (command.op === "stroke") {
       const points = command.points

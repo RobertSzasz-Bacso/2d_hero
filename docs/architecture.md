@@ -100,11 +100,24 @@ Underlays are images. They are never converted into walls by the editor.
 
 ## Editor behavior
 
-The kernel in `apps/web/src/core/` is the only place that changes a plan. The canvas calls it. See `docs/algorithms.md` for joins, rooms, snapping, `moveWall`, and typed dimensions.
+The kernel in `apps/web/src/core/` is the only place that changes a plan. The plan view calls it. See `docs/algorithms.md` for joins, rooms, snapping, `moveWall`, typed dimensions, and the grip operations.
 
-- Tools: select, wall, door, window, passage, dimension, room, text, column, stair, symbol, split. Escape returns to select.
-- Selection: click the topmost hit, shift toggles, drag on empty space box-selects. The properties panel edits thickness, opening width, sill, head, swing, fixture rotation, and text.
-- Drag a corner with the select tool. Drag a wall body parallel to itself. Drag an opening along its wall. Snapping applies on move.
+The plan view (`apps/web/src/editor/PlanSvg.tsx`) is one SVG that renders the scene items from `apps/web/src/drawing/scene.ts` through the camera, as described in the "Screen view" section of `docs/drawing-standard.md`. Each element is hit-tested on its own shape and carries `data-*` attributes with its id and measurements.
+
+- Tools: select, wall, rectangle, door, window, passage, dimension, room, text, column, stair, symbol, split, separator. Escape returns to select.
+- Selection: click the topmost hit, shift toggles. A box dragged left to right selects items fully inside it (window). A box dragged right to left also selects items it touches (crossing). Clicking inside a room face selects the room; double-clicking edits its name in place. The properties panel edits thickness, opening width, sill, head, swing, fixture rotation, and text.
+- Drag a corner with the select tool. Drag a wall body parallel to itself. Drag an opening along its wall. Snapping applies on move, and a glyph shows which snap won.
+- Grips on a selected wall: two end grips (move the vertex), a middle grip (move the wall parallel), two face grips (move that face, the opposite face stays; Alt keeps the centerline instead).
+- Temporary dimensions on a selected wall: its length and the face-to-face clear distance to the nearest parallel wall on each side. Click a value and type to change the geometry. They are not stored.
+- Grips on a selected opening: a center grip (slide along the wall, release over another wall to move it there), two edge grips (change the width with the other edge fixed), a hinge flip control, and a side flip control.
+- Grips on a selected fixture: move, rotate (15° steps, Shift for free), and resize width and depth. A fixture released within `snap_px` of a wall face turns its back (local +Y) to that face and touches it.
+- Right-click opens a context menu: delete, split wall here, merge collinear, flip hinge, flip side.
+- Arrow keys move the selection by the grid step, Shift by ten steps.
+- Wall tool: live preview to the cursor with length and angle; type a length and angle at the cursor (Tab switches, Enter applies); Shift locks to 0° or 90°; thickness presets 10, 12.5, 15, 20, 25, 30, 36.5 cm or custom; location line centre, left face, or right face (an editor setting, not stored); dashed alignment guides.
+- Rectangle tool: drag two corners or type width and depth, by interior (the clear room) or by centerline.
+- Door and window tools: a ghost at true width follows the hovered wall with live distances to the nearest faces. A typed distance places the near edge that far from the nearer inner corner. The swing goes to the side of the wall the cursor is on.
+- Symbol library: thumbnails of the symbols, drag and drop onto the plan, R rotates 90° while placing.
+- Dimension tool: click two vertices or opening edges, then the offset. The chain is stored with `auto: false`.
 - Wheel zooms at the cursor. Middle mouse or space-drag pans. Fit (F) frames the plan.
 - Undo (Ctrl+Z) and redo (Ctrl+Y) use the immer patch stack, cap 100. Accepting an AI proposal is one undo step.
 - Autosave: 400 ms after a change, and immediately on pointer-up. No save during pointer-move. `If-Match` carries the revision. 409 replaces the local plan with the server plan and shows `This plan was saved somewhere else. Reloaded.`

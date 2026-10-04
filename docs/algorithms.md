@@ -274,6 +274,8 @@ At an end of degree 1, close with a square cap.
 
 At a corner, intersect this wall's left offset with the neighbor's matching offset. If the intersection is farther than `miter_limit * thickness` from the vertex, bevel: cut across the offset at the vertex. A 90° corner of equal thickness meets at a square outer corner. The poche polygon contains the centerline and does not self-intersect.
 
+Where three or more wall ends meet at one vertex, each of those polygons also passes through the joint point between its two end corners. Otherwise two collinear walls with a partition between them leave a triangular gap at the joint, and the union has no free faces.
+
 A T-junction is an endpoint that lands on another wall's interior, within `join_snap_m` of that centerline and not only at its ends. Extend the butt wall to the host centerline, build both polygons, then subtract the host polygon from the butt so the butt stops at the host face.
 
 The union of the four wall polygons of the 5.00 × 4.00 m example, thickness 0.20 m, leaves a free rectangle of 4.80 × 3.80 m. Each wall is centred on its centerline, so the clear span is the centerline span minus one thickness, not two.
@@ -298,6 +300,22 @@ Any other neighbor keeps its far endpoint. If that neighbor was within `ortho_de
 
 The segment's `a` reference stays fixed. Its `b` reference moves along `a → b` until the distance equals the typed length in metres (the UI converts from cm or mm). Translate the rigid component of vertices attached on the `b` side by that same vector. Vertices on the `a` side stay. Orthogonal neighbors that were orthogonal stay orthogonal.
 
+### Grip operations
+
+These back the Phase 18 grips and the Phase 19 tools. Each has a JSON case in `shared/vectors/` that the TypeScript kernel and Python `planops` both pass. The wall's left normal `n` is the unit vector 90° counter-clockwise from `a → b`. Its left face is the centerline offset by `+n · thickness / 2`.
+
+- `setWallThicknessFromFace(wall, thickness, keep)`: `keep` is `left`, `right`, or `center`. The kept face (or the centerline) stays in place. For `keep = left` the centerline moves by `n · (old − new) / 2`; for `right` by `−n · (old − new) / 2`; for `center` it does not move. The centerline move is a `moveWall`, so orthogonal neighbors stay orthogonal. Then the thickness is set. Thickness must stay in the schema range (> 0 and ≤ 1.5).
+- `setClearDistance(wall, other, distance)`: both walls within `ortho_deg` of parallel, otherwise an error. With `d` the signed distance from the wall centerline to the other centerline along `n`, the clear distance is `|d| − t_wall / 2 − t_other / 2`. Move the wall by `−sign(d) · n · (distance − clear)` with `moveWall`. `distance` must be > 0.
+- `setOpeningEdge(opening, edge, delta)`: `edge` is `start` (closer to wall vertex `a`) or `end`. `delta` is metres of growth outward from the opening center (negative shrinks). The other edge stays. The width becomes `width + delta` and the center moves by `delta / 2` toward the moved edge. The result must keep `width > 0` and the whole opening on the wall centerline span, otherwise an error.
+- `rehostOpening(opening, wall, point)`: the opening moves to `wall` with its center at the foot of `point` on that centerline, clamped so the opening stays on the span. Width, sill, head, swing, and side are kept. An opening whose width is not less than the target wall length is an error and the plan is unchanged.
+- `moveSelection(items, delta)`: moves every vertex referenced by a selected vertex, wall, or separator, every selected fixture, column, and text insertion point, every selected stair outline, and every selected room seed, by exactly `delta`. Openings ride on their walls.
+- `snapRotation(deg, free)`: without `free`, round to the nearest multiple of 15°.
+- `snapFixtureToWall(fixture, toleranceM)`: find the wall face nearest to the fixture center whose distance from the fixture's back edge is within `toleranceM`. Rotate the fixture so local +Y points from the room toward that face, and move it along the face normal so the back edge lies on the face. No face within tolerance: unchanged.
+- `wallFromLocation(p, q, thickness, location)`: `location` is `center`, `left`, or `right`. The clicked line `p → q` is that face. For `left` the centerline is the clicked line offset by `−n · thickness / 2`; for `right` by `+n · thickness / 2`.
+- `addRectangle(c1, c2, thickness, mode)`: four vertices and four closed walls, counter-clockwise. `mode = interior`: the box `c1, c2` is the clear room, so centerlines are offset outward by `thickness / 2`. `mode = centerline`: the box is the centerline. A 4.80 × 3.80 m interior box with 0.20 m walls has 5.00 × 4.00 m centerlines and 18.24 m² net.
+- `placeOpeningAtDistance(wall, kind, end, distance, width)`: `end` is `a` or `b`. The inner corner at that end is the end vertex moved along the wall by half the thickest other wall meeting that vertex (zero if none). The near edge of the opening is placed `distance` from that corner along the wall.
+- `addDimension(refs, offset)`: a chain through two or more references, `auto: false`.
+
 ### Snapping
 
 A candidate must lie within `snap_px` of the cursor. Higher priority wins even if it is farther. Same priority: the nearest wins.
@@ -307,8 +325,9 @@ A candidate must lie within `snap_px` of the cursor. Higher priority wins even i
 3. Intersection of two centerlines.
 4. Perpendicular foot on a centerline.
 5. Extension of a centerline beyond an end, up to 2 m.
-6. Angle lock to 0°, 45°, or 90° from the previous wall-tool segment.
-7. Grid.
+6. Alignment: the cursor's x is within `snap_px` of a vertex's x, or its y of a vertex's y. The point takes that coordinate and keeps the cursor's other one. When both an x and a y alignment exist, the point takes both. The tool draws a dashed guide from the aligned vertex.
+7. Angle lock to 0°, 45°, or 90° from the previous wall-tool segment.
+8. Grid.
 
 ### Undo
 

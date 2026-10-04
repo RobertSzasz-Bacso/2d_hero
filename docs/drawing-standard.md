@@ -1,6 +1,6 @@
 # Drawing standard
 
-Metric European construction floor plan. The compiler in `apps/web/src/drawing/` turns a schema v2 plan into draw commands. The PDF writer consumes those commands. The canvas may look lighter, but the PDF follows this file.
+Metric European construction floor plan. `apps/web/src/drawing/scene.ts` turns a schema v2 plan level into scene items in plan metres. The compiler in `apps/web/src/drawing/compile.ts` maps those items to paper and the PDF writer consumes the result. The editor renders the same scene items as SVG through the camera (see "Screen view"), so the screen and the PDF follow this file.
 
 Standards used for the choices below: ISO 128 (line weights and types), ISO 5457 (sheet frame, simplified), ISO 3098 (lettering), ISO 7200 (title block fields). Dimension style follows common metric architectural practice: centimetres, slash ticks, chains outside the building.
 
@@ -43,7 +43,7 @@ Text on the sheet, ISO 3098 upright:
 
 ## Walls
 
-Fill the wall-join polygon with black at 35% (solid poche). Stroke the outline at 0.50 mm. Cut openings out of the fill so the hole is paper-white.
+Fill the wall-join polygon solid black (poche, 100%, no transparency). Stroke the outline at 0.50 mm. Cut openings out of the fill so the hole is paper-white.
 
 Do not draw the centerline on the PDF. The editor may show it while a wall is selected.
 
@@ -81,27 +81,38 @@ Centered on the net room polygon, stacked: name, number, area with one decimal a
 
 ## Columns, stairs, fixtures
 
-- Column: solid poche rectangle or rotated rectangle, 0.50 mm outline, same fill as walls.
+- Column: solid black poche rectangle or rotated rectangle, 0.50 mm outline, same fill as walls.
 - Stair: outline 0.25 mm, an arrow up the run, treads as 0.13 mm lines across the width. Count matches `riserCount` as closely as the length allows. Break line if the stair continues off the level.
-- Symbols are 0.25 mm strokes, no downloaded artwork. Insertion point is the center. The symbol scales to `width` and `depth`.
+- Symbols are 0.25 mm strokes, no downloaded artwork. Insertion point is the center. The symbol is drawn in a unit square from −0.5 to 0.5 on both axes and scales to `width` (local X) and `depth` (local Y). Local +Y is the back of the symbol, the side that goes against a wall.
 
-Symbol ids, and only these:
+Symbol ids, and only these. Each part is one polyline. The part count is tested.
 
-| Id | Drawn as |
-| --- | --- |
-| `toilet` | Pan and tank in plan. |
-| `sink` | Rectangle with an oval basin. |
-| `bathtub` | Rectangle with a drain arc. |
-| `shower` | Square with an X and a door swing. |
-| `kitchen-counter` | Rectangle. |
-| `stove` | Square with four burners. |
-| `bed-double` | Rectangle with a pillow band. |
-| `sofa` | Rectangle with a back line. |
-| `table` | Rectangle. |
-| `wardrobe` | Rectangle with a cross. |
-| `block` | Dashed rectangle. |
-| `chair` | Square with a back arc. Hand-placed only. |
+| Id | Parts | Drawn as |
+| --- | --- | --- |
+| `toilet` | 3 | Tank against the back, bowl, seat opening inside the bowl. |
+| `sink` | 3 | Counter outline, basin, tap at the back of the basin. |
+| `bathtub` | 3 | Outer rim, rounded inner basin, drain. |
+| `shower` | 5 | Tray, two diagonals, drain, door swing. |
+| `kitchen-counter` | 2 | Counter outline, worktop front edge line. |
+| `stove` | 9 | Hob outline, four burners, each with an outer and an inner ring. |
+| `bed-double` | 5 | Frame, two pillows at the back, blanket fold line, turned-down corner. |
+| `sofa` | 6 | Back, two arms, three seat cushions. |
+| `table` | 2 | Top outline, inner edge line. |
+| `wardrobe` | 6 | Carcass, hanging rail, four hangers. |
+| `block` | 1 | Dashed rectangle. |
+| `chair` | 2 | Seat, back rest. Hand-placed only. |
 
 `chair` is not a detector class. It exists so the library can place one.
 
 The editor can hide `role: furniture` without hiding `role: fixture`.
+
+## Screen view
+
+The editor shows the same scene items as the sheet, at the scale in `plan.sheet.scale`, as a print preview that follows the zoom. One paper millimetre is `pixelsPerMeter * scale / 1000` screen pixels.
+
+- Stroke width in pixels: `max(1, weightMm * pixelsPerMeter * scale / 1000)`. At 1:50 and 100 px/m a 0.50 mm cut line is 2.5 px. At 20 px/m a 0.13 mm line clamps to 1 px.
+- Text height in pixels: `max(10, heightMm * pixelsPerMeter * scale / 1000)`. At 1:50 and 100 px/m a 5 mm room name is 25 px. At 20 px/m a 2.5 mm dimension clamps to 10 px.
+- Poche is solid black, as on paper. A hovered element gets a 2 px blue outline (`#3b82f6`). A selected element is filled and outlined blue (`#1d4ed8`), and a selected wall also shows its dashed centerline.
+- Thin elements (door swings, symbol strokes, dimension lines) get an invisible hit stroke `snap_px` wide so they can be clicked.
+- Editing overlays are screen-sized and never printed: grips are 9 px squares (ends), 9 px diamonds (wall middle), 9 px triangles pointing outward (wall faces, opening edges), 10 px circles (rotate), and flip arrows 14 px long. Temporary dimensions are blue (`#2563eb`), 12 px text, with the same slash ticks as a printed chain.
+- The underlay image stays under the drawing and is not printed.

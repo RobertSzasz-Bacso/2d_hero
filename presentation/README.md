@@ -21,4 +21,4 @@ Open the URL Vite prints (port 5174 unless that port is taken).
 - **Jump:** the dots in the top bar.
 - **Simulate flow:** plays a packet along the stage path. The payload inspector follows the node the packet reaches.
 - **Click a node** to read a sample input, the transformation, and the output.
-- **Current implementation** hides Phase 17. **Full target architecture** draws the planned ML sidecar as a dashed node. It is specified in `master_plan.md` and is not built.
+- **Current implementation** hides Phase 20. **Full target architecture** draws the planned ML sidecar as a dashed node. It is specified in `master_plan.md` and is not built.

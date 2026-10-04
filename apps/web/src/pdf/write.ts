@@ -15,7 +15,6 @@ import {
   rectangle,
   setDashPattern,
   setFillingRgbColor,
-  setGraphicsState,
   setLineCap,
   setLineJoin,
   setLineWidth,
@@ -32,12 +31,10 @@ export async function writePdf(result: CompileResult): Promise<Uint8Array> {
   const font = await doc.embedFont(StandardFonts.Helvetica)
   for (const sheet of result.sheets) {
     const page = doc.addPage([sheet.widthMm * PT, sheet.heightMm * PT])
-    const poche = doc.context.obj({ Type: "ExtGState", ca: 0.35, CA: 1 })
-    const pocheName = page.node.newExtGState("Poche", poche)
     const frame = sheet.commands.filter((command) => !command.clipped)
     const model = sheet.commands.filter((command) => command.clipped)
     for (const command of frame) {
-      paint(page, font, command, pocheName)
+      paint(page, font, command)
     }
     page.pushOperators(
       pushGraphicsState(),
@@ -46,7 +43,7 @@ export async function writePdf(result: CompileResult): Promise<Uint8Array> {
       endPath(),
     )
     for (const command of model) {
-      paint(page, font, command, pocheName)
+      paint(page, font, command)
     }
     page.pushOperators(popGraphicsState())
   }
@@ -57,14 +54,9 @@ function paint(
   page: ReturnType<PDFDocument["addPage"]>,
   font: Awaited<ReturnType<PDFDocument["embedFont"]>>,
   command: DrawCommand,
-  pocheName: ReturnType<ReturnType<PDFDocument["addPage"]>["node"]["newExtGState"]>,
 ): void {
   if (command.op === "fill") {
-    const operators = [
-      pushGraphicsState(),
-      setGraphicsState(pocheName),
-      setFillingRgbColor(0, 0, 0),
-    ]
+    const operators = [pushGraphicsState(), setFillingRgbColor(0, 0, 0)]
     for (const ring of command.rings) {
       operators.push(...ringOps(ring, true))
     }

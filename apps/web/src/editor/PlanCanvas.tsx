@@ -1,21 +1,19 @@
 import { useEffect, useRef, useState } from "react"
-import { Group, Layer, Line, Stage } from "react-konva"
 import { changedWallIds } from "@/core/ai.ts"
-import { dimensionLabelPoint, roomLabelPoint } from "@/core/dimensions.ts"
+import { dimensionLabelPoint } from "@/core/dimensions.ts"
 import { displayFromMetres, metresFromDisplay } from "@/core/draw.ts"
 import { footOnLine } from "@/core/geom.ts"
 import { applyTypedDimension, moveVertex, moveWall, setOpening } from "@/core/ops.ts"
 import { pickAt } from "@/core/pick.ts"
 import type { Level, Plan, Point } from "@/core/plan-types.ts"
-import { extractRooms } from "@/core/rooms.ts"
 import { snapPoint } from "@/core/snap.ts"
 import { editorTolerances } from "@/core/tolerances.ts"
-import { wallPolygons } from "@/core/wall-polygons.ts"
-import { planToScreen, screenToPlan } from "@/view/camera.ts"
+import type { SceneElement } from "@/drawing/scene.ts"
+import { screenToPlan } from "@/view/camera.ts"
 import { extendWall, placeColumn, placeFixture, placeOpening, placeSeparator, placeSplit, placeStair, placeText, startWall } from "./draw-actions.ts"
-import { formatMetre, offsetAlongWall, openingEnds, segmentLength, wallAngleDeg } from "./metrics.ts"
-import { itemsInPlanRect, type SelectionItem } from "./select.ts"
-import { symbolPolylines } from "./symbols.ts"
+import { offsetAlongWall } from "./metrics.ts"
+import PlanSvg from "./PlanSvg.tsx"
+import { itemsInPlanRect } from "./select.ts"
 import UnderlayLayer from "./UnderlayLayer.tsx"
 import { useEditor } from "./store.ts"
 
@@ -32,6 +30,8 @@ type Session = {
   stop: () => void
 }
 
+type DimensionSegment = Level["dimensions"][number]["segments"][number]
+
 function shownLevel(plan: Plan): Level | undefined {
   const id = useEditor.getState().activeLevelId
   return plan.levels.find((level) => level.id === id) ?? plan.levels[0]
@@ -42,8 +42,12 @@ function localPoint(event: { clientX: number; clientY: number }, host: HTMLEleme
   return { x: event.clientX - rect.left, y: event.clientY - rect.top }
 }
 
-function selected(items: readonly SelectionItem[], kind: SelectionItem["kind"], id: string): boolean {
-  return items.some((item) => item.kind === kind && item.id === id)
+function isPlacing(state: ReturnType<typeof useEditor.getState>): boolean {
+  return state.symbol !== null || (state.tool !== "select" && state.tool !== "door" && state.tool !== "window" && state.tool !== "passage" && state.tool !== "split")
+}
+
+function isPan(event: React.PointerEvent): boolean {
+  return event.button === 1 || (useEditor.getState().spaceDown && event.button === 0)
 }
 
 export default function PlanCanvas() {
@@ -58,7 +62,8 @@ export default function PlanCanvas() {
   const host = useRef<HTMLDivElement>(null)
   const dragRef = useRef<Session | null>(null)
   const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
-  const [dimensionEdit, setDimensionEdit] = useState<{ id: string; index: number; value: string } | null>(null)
+  const [dimensionEdit, setDimensionEdit] = useState<{ id: string; index: number; value: string; at: Point } | null>(null)
+  const [hover, setHover] = useState<SceneElement | null>(null)
   const [toolError, setToolError] = useState("")
 
   useEffect(() => {
@@ -114,10 +119,6 @@ export default function PlanCanvas() {
   const activeLevelId = useEditor((state) => state.activeLevelId)
   const preview = useEditor((state) => state.aiPreview)
   const level = plan?.levels.find((item) => item.id === activeLevelId) ?? plan?.levels[0]
-  const vertices = new Map(level?.vertices.map((vertex) => [vertex.id, vertex]) ?? [])
-  const polygons = plan && level ? wallPolygons(plan, level.id) : []
-  const previewLevel = preview?.levels.find((item) => item.id === level?.id) ?? preview?.levels[0]
-  const previewPolygons = preview && previewLevel ? wallPolygons(preview, previewLevel.id) : []
   const highlighted = plan && preview ? changedWallIds(plan, preview) : new Set<string>()
 
   function begin(kind: SessionKind, event: React.PointerEvent, id?: string) {
@@ -177,17 +178,14 @@ export default function PlanCanvas() {
   }
 
   function onBackground(event: React.PointerEvent) {
-    const state = useEditor.getState()
-    const space = state.spaceDown
-    if (event.button === 1 || (space && event.button === 0)) {
+    if (isPan(event)) {
       begin("pan", event)
       return
     }
     if (event.button !== 0) {
       return
     }
-    const placing = state.symbol !== null || (state.tool !== "select" && state.tool !== "door" && state.tool !== "window" && state.tool !== "passage" && state.tool !== "split")
-    if (!placing) {
+    if (!isPlacing(useEditor.getState())) {
       begin("box", event)
       return
     }
@@ -198,316 +196,116 @@ export default function PlanCanvas() {
     placeAt(localPoint(event, node))
   }
 
+  function onElementDown(element: SceneElement, event: React.PointerEvent) {
+    if (isPan(event) || event.button !== 0) {
+      return
+    }
+    const node = host.current
+    if (!node) {
+      return
+    }
+    if (element.kind === "wall") {
+      onWallPointer(event, element.id)
+      return
+    }
+    event.stopPropagation()
+    const state = useEditor.getState()
+    if (isPlacing(state)) {
+      placeAt(localPoint(event, node))
+      return
+    }
+    if (state.tool !== "select") {
+      return
+    }
+    if (element.kind === "opening") {
+      begin("opening", event, element.id)
+      return
+    }
+    state.toggleSelection({ kind: element.kind, id: element.id }, event.shiftKey)
+  }
+
+  function onVertexDown(vertexId: string, event: React.PointerEvent) {
+    if (isPan(event) || event.button !== 0) {
+      return
+    }
+    const node = host.current
+    if (!node) {
+      return
+    }
+    event.stopPropagation()
+    const state = useEditor.getState()
+    if (isPlacing(state)) {
+      placeAt(localPoint(event, node))
+      return
+    }
+    if (state.tool !== "select") {
+      return
+    }
+    begin("vertex", event, vertexId)
+  }
+
+  function onDimensionText(dimensionId: string, segmentIndex: number, at: Point) {
+    const current = useEditor.getState().history?.plan
+    const levelNow = current ? shownLevel(current) : undefined
+    const dimension = levelNow?.dimensions.find((item) => item.id === dimensionId)
+    const label = levelNow && dimension ? dimensionLabelPoint(levelNow, dimension, segmentIndex) : null
+    if (!label) {
+      return
+    }
+    useEditor.getState().setSelection([{ kind: "dimension", id: dimensionId }])
+    setDimensionEdit({ id: dimensionId, index: segmentIndex, value: String(displayFromMetres(label.length, dimensionUnit)), at })
+  }
+
+  const editingSegment = dimensionEdit ? level?.dimensions.find((item) => item.id === dimensionEdit.id)?.segments[dimensionEdit.index] : undefined
+
   return (
-    <div ref={host} className="relative h-full w-full overflow-hidden bg-white" onPointerDown={onBackground} data-testid="plan-stage" data-tool={tool} data-symbol={symbol ?? ""}>
+    <div
+      ref={host}
+      className="relative h-full w-full overflow-hidden bg-white"
+      onPointerDown={onBackground}
+      data-testid="plan-stage"
+      data-tool={tool}
+      data-symbol={symbol ?? ""}
+    >
       {projectId && level ? <UnderlayLayer projectId={projectId} levelId={level.id} /> : null}
-      <div className="pointer-events-none absolute inset-0">
-        {stage.width > 0 && stage.height > 0 ? (
-          <Stage width={stage.width} height={stage.height} listening={false}>
-            <Layer>
-              <Group x={camera.originX} y={camera.originY} scaleX={camera.pixelsPerMeter} scaleY={-camera.pixelsPerMeter}>
-                {polygons.map((polygon) => (
-                  <Line
-                    key={polygon.wallId}
-                    points={polygon.ring.flatMap((point) => [point.x, point.y])}
-                    closed
-                    fill="rgba(0,0,0,0.35)"
-                    stroke={selected(selection, "wall", polygon.wallId) ? "#1d4ed8" : "#111827"}
-                    strokeWidth={selected(selection, "wall", polygon.wallId) ? 0.04 : 0.015}
-                  />
-                ))}
-                {previewPolygons.map((polygon) =>
-                  highlighted.has(polygon.wallId) ? (
-                    <Line
-                      key={`${polygon.wallId}-preview`}
-                      points={polygon.ring.flatMap((point) => [point.x, point.y])}
-                      closed
-                      fill="rgba(234,88,12,0.35)"
-                      stroke="#ea580c"
-                      strokeWidth={0.06}
-                    />
-                  ) : null,
-                )}
-                {level?.openings.map((opening) => {
-                  const ends = openingEnds(level, opening)
-                  const wall = level.walls.find((item) => item.id === opening.wall)
-                  if (!ends || !wall) {
-                    return null
-                  }
-                  return (
-                    <Line
-                      key={opening.id}
-                      points={[ends.a.x, ends.a.y, ends.b.x, ends.b.y]}
-                      stroke="#ffffff"
-                      strokeWidth={wall.thickness * 0.92}
-                    />
-                  )
-                })}
-                {level?.separators.map((separator) => {
-                  const a = vertices.get(separator.a)
-                  const b = vertices.get(separator.b)
-                  if (!a || !b) {
-                    return null
-                  }
-                  return (
-                    <Line
-                      key={separator.id}
-                      points={[a.x, a.y, b.x, b.y]}
-                      stroke="#64748b"
-                      strokeWidth={0.02}
-                      dash={[0.08, 0.06]}
-                    />
-                  )
-                })}
-                {level?.columns.map((column) => (
-                  <Line
-                    key={column.id}
-                    x={column.x}
-                    y={column.y}
-                    rotation={column.rotationDeg}
-                    points={rectanglePoints(column.width, column.depth)}
-                    closed
-                    fill="rgba(0,0,0,0.55)"
-                    stroke="#111827"
-                    strokeWidth={0.02}
-                  />
-                ))}
-                {level?.stairs.map((stair) => (
-                  <Line
-                    key={stair.id}
-                    points={stair.outline.flatMap((point) => [point.x, point.y])}
-                    closed
-                    stroke="#111827"
-                    strokeWidth={0.015}
-                  />
-                ))}
-                {level?.fixtures
-                  .filter((fixture) => !(hideFurniture && fixture.role === "furniture"))
-                  .map((fixture) => (
-                    <Group key={fixture.id} x={fixture.x} y={fixture.y} rotation={fixture.rotationDeg} scaleX={fixture.width} scaleY={fixture.depth}>
-                      {symbolPolylines(fixture.symbol).map((polyline, index) => (
-                        <Line
-                          key={`${fixture.id}-${index}`}
-                          points={polyline.flatMap((point) => [point.x, point.y])}
-                          stroke="#111827"
-                          strokeWidth={1.5}
-                          strokeScaleEnabled={false}
-                          dash={fixture.symbol === "block" ? [4, 3] : undefined}
-                        />
-                      ))}
-                    </Group>
-                  ))}
-                {level?.walls.map((wall) => {
-                  if (!selected(selection, "wall", wall.id)) {
-                    return null
-                  }
-                  const a = vertices.get(wall.a)
-                  const b = vertices.get(wall.b)
-                  if (!a || !b) {
-                    return null
-                  }
-                  return (
-                    <Line
-                      key={`${wall.id}-center`}
-                      points={[a.x, a.y, b.x, b.y]}
-                      stroke="#2563eb"
-                      strokeWidth={0.02}
-                      dash={[0.08, 0.06]}
-                    />
-                  )
-                })}
-              </Group>
-            </Layer>
-          </Stage>
-        ) : null}
-      </div>
-      <div className="pointer-events-none absolute inset-0">
-        {level?.walls.map((wall) => {
-          const a = vertices.get(wall.a)
-          const b = vertices.get(wall.b)
-          if (!a || !b) {
-            return null
-          }
-          const screen = wallHandle(camera, a, b)
-          return (
-            <button
-              key={wall.id}
-              type="button"
-              data-wall-id={wall.id}
-              data-thickness={formatMetre(wall.thickness)}
-              data-length={formatMetre(segmentLength(a, b))}
-              data-angle={formatMetre(wallAngleDeg(a, b))}
-              data-ai-changed={highlighted.has(wall.id) ? "true" : "false"}
-              data-selected={selected(selection, "wall", wall.id) ? "true" : "false"}
-              className="pointer-events-auto absolute z-10 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-slate-700 bg-white"
-              style={{ left: screen.x, top: screen.y }}
-              onPointerDown={(event) => onWallPointer(event, wall.id)}
-            />
-          )
-        })}
-        {level?.openings.map((opening) => {
-          const ends = openingEnds(level, opening)
-          if (!ends) {
-            return null
-          }
-          const screen = planToScreen(camera, ends.center)
-          return (
-            <button
-              key={opening.id}
-              type="button"
-              data-opening-id={opening.id}
-              data-offset={formatMetre(opening.offset)}
-              className="pointer-events-auto absolute z-20 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-700 bg-amber-100"
-              style={{ left: screen.x, top: screen.y }}
-              onPointerDown={(event) => begin("opening", event, opening.id)}
-            />
-          )
-        })}
-        {level?.vertices.map((vertex) => {
-          const screen = planToScreen(camera, vertex)
-          return (
-            <button
-              key={vertex.id}
-              type="button"
-              data-vertex-id={vertex.id}
-              data-x={formatMetre(vertex.x)}
-              data-y={formatMetre(vertex.y)}
-              data-selected={selected(selection, "vertex", vertex.id) ? "true" : "false"}
-              className="pointer-events-auto absolute z-30 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-900 bg-white"
-              style={{ left: screen.x, top: screen.y }}
-              onPointerDown={(event) => begin("vertex", event, vertex.id)}
-            />
-          )
-        })}
-      </div>
-        {plan && level
-          ? extractRooms(plan, level.id).rooms.map((room) => {
-              const screen = planToScreen(camera, roomLabelPoint(room.polygon))
-              return (
-                <div
-                  key={room.id}
-                  className="pointer-events-none absolute z-0 -translate-x-1/2 -translate-y-1/2 text-center text-xs text-slate-800"
-                  style={{ left: screen.x, top: screen.y }}
-                  data-room-id={room.id}
-                >
-                  <div>{room.name || "Room"}</div>
-                  {room.number ? <div>{room.number}</div> : null}
-                  <div data-testid="room-area">{`${room.area.toFixed(1)} m²`}</div>
-                </div>
-              )
-            })
-          : null}
-        {level?.dimensions.map((dimension) =>
-          dimension.segments.map((segment, index) => {
-            const label = dimensionLabelPoint(level, dimension, index)
-            if (!label) {
-              return null
+      {plan && level && stage.width > 0 && stage.height > 0 ? (
+        <PlanSvg
+          plan={plan}
+          level={level}
+          camera={camera}
+          width={stage.width}
+          height={stage.height}
+          unit={dimensionUnit}
+          hideFurniture={hideFurniture}
+          selection={selection}
+          hover={hover}
+          preview={preview}
+          aiChanged={highlighted}
+          onElementDown={onElementDown}
+          onVertexDown={onVertexDown}
+          onDimensionText={onDimensionText}
+          onHover={setHover}
+        />
+      ) : null}
+      {dimensionEdit && editingSegment ? (
+        <input
+          className="absolute z-30 w-16 -translate-x-1/2 -translate-y-1/2 border border-blue-600 bg-white px-1 text-xs"
+          style={{ left: dimensionEdit.at.x, top: dimensionEdit.at.y }}
+          value={dimensionEdit.value}
+          autoFocus
+          data-testid="dimension-input"
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => setDimensionEdit({ ...dimensionEdit, value: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              applyDimension(dimensionEdit.value, editingSegment)
+            } else if (event.key === "Escape") {
+              setDimensionEdit(null)
             }
-            const screen = planToScreen(camera, label.point)
-            const editing = dimensionEdit?.id === dimension.id && dimensionEdit.index === index
-            return (
-              <button
-                key={`${dimension.id}-${index}`}
-                type="button"
-                data-dimension-id={dimension.id}
-                className="pointer-events-auto absolute z-0 -translate-x-1/2 -translate-y-1/2 bg-white/80 px-1 text-xs text-slate-800"
-                style={{ left: screen.x, top: screen.y }}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => {
-                  useEditor.getState().setSelection([{ kind: "dimension", id: dimension.id }])
-                  setDimensionEdit({ id: dimension.id, index, value: String(displayFromMetres(label.length, dimensionUnit)) })
-                }}
-              >
-                {editing ? (
-                  <input
-                    className="w-16 border border-slate-300 px-1"
-                    value={dimensionEdit.value}
-                    autoFocus
-                    onChange={(event) => setDimensionEdit({ id: dimension.id, index, value: event.target.value })}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        applyDimension(dimension.id, index, dimensionEdit.value, segment)
-                      }
-                    }}
-                    onBlur={() => applyDimension(dimension.id, index, dimensionEdit.value, segment)}
-                  />
-                ) : (
-                  displayFromMetres(label.length, dimensionUnit)
-                )}
-              </button>
-            )
-          }),
-        )}
-        {level?.fixtures
-          .filter((fixture) => !(hideFurniture && fixture.role === "furniture"))
-          .map((fixture) => {
-            const screen = planToScreen(camera, fixture)
-            return (
-              <button
-                key={fixture.id}
-                type="button"
-                data-fixture-id={fixture.id}
-                data-symbol={fixture.symbol}
-                className="pointer-events-auto absolute z-20 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-800 bg-emerald-100"
-                style={{ left: screen.x, top: screen.y }}
-                onPointerDown={(event) => {
-                  event.stopPropagation()
-                  useEditor.getState().toggleSelection({ kind: "fixture", id: fixture.id }, event.shiftKey)
-                }}
-              />
-            )
-          })}
-        {level?.columns.map((column) => {
-          const screen = planToScreen(camera, column)
-          return (
-            <button
-              key={column.id}
-              type="button"
-              data-column-id={column.id}
-              className="pointer-events-auto absolute z-20 size-3 -translate-x-1/2 -translate-y-1/2 border border-slate-900 bg-slate-700"
-              style={{ left: screen.x, top: screen.y }}
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                useEditor.getState().toggleSelection({ kind: "column", id: column.id }, event.shiftKey)
-              }}
-            />
-          )
-        })}
-        {level?.stairs.map((stair) => {
-          const center = stairCenter(stair.outline)
-          const screen = planToScreen(camera, center)
-          return (
-            <button
-              key={stair.id}
-              type="button"
-              data-stair-id={stair.id}
-              className="pointer-events-auto absolute z-20 size-3 -translate-x-1/2 -translate-y-1/2 border border-slate-900 bg-white"
-              style={{ left: screen.x, top: screen.y }}
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                useEditor.getState().toggleSelection({ kind: "stair", id: stair.id }, event.shiftKey)
-              }}
-            />
-          )
-        })}
-        {level?.texts.map((text) => {
-          const screen = planToScreen(camera, text)
-          return (
-            <button
-              key={text.id}
-              type="button"
-              data-text-id={text.id}
-              className="pointer-events-auto absolute z-20 -translate-x-1/2 -translate-y-1/2 bg-white px-1 text-xs"
-              style={{ left: screen.x, top: screen.y }}
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                useEditor.getState().toggleSelection({ kind: "text", id: text.id }, event.shiftKey)
-              }}
-            >
-              {text.text}
-            </button>
-          )
-        })}
+          }}
+          onBlur={() => applyDimension(dimensionEdit.value, editingSegment)}
+        />
+      ) : null}
       {toolError ? <p className="absolute bottom-2 left-2 z-40 bg-white px-2 text-xs text-red-700">{toolError}</p> : null}
       {box ? (
         <div
@@ -618,6 +416,10 @@ export default function PlanCanvas() {
     if (!current || !levelNow || !node) {
       return
     }
+    if (isPlacing(state)) {
+      placeAt(localPoint(event, node))
+      return
+    }
     if (state.tool === "door" || state.tool === "window" || state.tool === "passage") {
       const wall = levelNow.walls.find((item) => item.id === wallId)
       const a = wall ? levelNow.vertices.find((vertex) => vertex.id === wall.a) : undefined
@@ -657,12 +459,7 @@ export default function PlanCanvas() {
     begin("wall", event, wallId)
   }
 
-  function applyDimension(
-    id: string,
-    index: number,
-    value: string,
-    segment: { a: { type: "vertex"; id: string } | { type: "opening"; id: string; edge: "start" | "end" }; b: { type: "vertex"; id: string } | { type: "opening"; id: string; edge: "start" | "end" } },
-  ) {
+  function applyDimension(value: string, segment: DimensionSegment) {
     const state = useEditor.getState()
     const current = state.history?.plan
     const levelNow = current ? shownLevel(current) : undefined
@@ -678,8 +475,6 @@ export default function PlanCanvas() {
       setToolError(caught instanceof Error ? caught.message : "The dimension was not applied.")
     }
     setDimensionEdit(null)
-    void index
-    void id
   }
 
   function applySession(session: Session, screen: Point) {
@@ -788,35 +583,4 @@ export default function PlanCanvas() {
     }
     state.setSelection(found)
   }
-}
-
-function rectanglePoints(width: number, depth: number): number[] {
-  const x = width / 2
-  const y = depth / 2
-  return [-x, -y, x, -y, x, y, -x, y]
-}
-
-function stairCenter(outline: readonly Point[]): Point {
-  if (outline.length === 0) {
-    return { x: 0, y: 0 }
-  }
-  let x = 0
-  let y = 0
-  for (const point of outline) {
-    x += point.x
-    y += point.y
-  }
-  return { x: x / outline.length, y: y / outline.length }
-}
-
-function wallHandle(camera: { pixelsPerMeter: number; originX: number; originY: number }, a: Point, b: Point): Point {
-  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const length = Math.hypot(dx, dy) || 1
-  const scale = 18 / camera.pixelsPerMeter
-  return planToScreen(camera, {
-    x: mid.x + (-dy / length) * scale,
-    y: mid.y + (dx / length) * scale,
-  })
 }

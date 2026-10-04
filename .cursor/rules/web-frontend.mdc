@@ -1,22 +1,22 @@
 ---
-description: Editor frontend — pure core, Konva for drawing only
+description: Editor frontend — pure core, SVG plan view from the shared scene
 globs: apps/web/src/**/*.ts,apps/web/src/**/*.tsx
 alwaysApply: false
 ---
 
 # Web frontend
 
-- `src/core/` is pure TypeScript. It must not import React, Konva, or three.js.
-- Konva draws. Hit targets and tools call core operations. Tools are state machines, not boolean piles on the stage.
+- `src/core/` is pure TypeScript. It must not import React or three.js.
+- The plan view is SVG in React (`src/editor/PlanSvg.tsx`), drawn from `src/drawing/scene.ts`, the same items the sheet compiler uses. Each element is its own hit shape. Tools call core operations. Tools are state machines, not boolean piles on the stage.
 - Plan Y is up. Convert to screen Y in one view module.
 - Picking uses `rbush`. Undo uses `immer` patches. Wall polygons use `polygon-clipping`.
 - Autosave on pointer-up or a short debounce, never on every pointer-move. Send the revision. A 409 reloads the plan and shows an error.
-- PDF and SVG come from `src/drawing/` draw commands, not from a screenshot of the canvas.
+- PDF and SVG come from `src/drawing/` draw commands, not from a screenshot of the view.
 
 ```typescript
-// Bad: core importing the canvas
-import { Line } from "react-konva";
+// Bad: core importing the view
+import PlanSvg from "@/editor/PlanSvg.tsx";
 
-// Good: core returns points, the canvas maps them
+// Good: core returns points, the view maps them
 const poly = wallPolygon(wall, joins);
 ```

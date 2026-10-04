@@ -24,7 +24,7 @@ After Phase 1, the tree looks like this. Do not create later-phase folders early
 ```text
 apps/api/                 Python package `hero` (uv, src layout)
 apps/web/                 Vite + React editor
-apps/web/src/core/        Pure TypeScript plan kernel (no React, no Konva)
+apps/web/src/core/        Pure TypeScript plan kernel (no React, no three)
 apps/web/src/drawing/     Plan → draw commands (Phase 6)
 apps/web/src/pdf/         pdf-lib writer (Phase 6)
 shared/vectors/           JSON cases both kernels must pass (Phase 3+)

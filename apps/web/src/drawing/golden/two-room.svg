@@ -16,22 +16,22 @@
 <text x="74" y="275.8" font-family="Helvetica, Arial, sans-serif" font-size="2.5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">5 m</text>
 <clipPath id="plan"><rect x="20" y="10" width="390" height="227"/></clipPath>
 <g clip-path="url(#plan)">
-<path d="M113 165.48 L156 165.48 L156 161.48 L117 161.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
+<path d="M113 165.48 L156 165.48 L156 161.48 L117 161.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
 <polyline points="113,165.48 156,165.48 156,161.48 117,161.48 113,165.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M174 165.48 L215 165.48 L213 161.48 L174 161.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
-<polyline points="174,165.48 215,165.48 213,161.48 174,161.48 174,165.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M215 165.48 L317 165.48 L313 161.48 L217 161.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
-<polyline points="215,165.48 317,165.48 313,161.48 217,161.48 215,165.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M317 165.48 L317 81.48 L313 85.48 L313 161.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
+<path d="M174 165.48 L215 165.48 L215 163.48 L213 161.48 L174 161.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
+<polyline points="174,165.48 215,165.48 215,163.48 213,161.48 174,161.48 174,165.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M215 165.48 L317 165.48 L313 161.48 L217 161.48 L215 163.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
+<polyline points="215,165.48 317,165.48 313,161.48 217,161.48 215,163.48 215,165.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M317 165.48 L317 81.48 L313 85.48 L313 161.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
 <polyline points="317,165.48 317,81.48 313,85.48 313,161.48 317,165.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M317 81.48 L215 81.48 L217 85.48 L313 85.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
-<polyline points="317,81.48 215,81.48 217,85.48 313,85.48 317,81.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M215 81.48 L113 81.48 L117 85.48 L213 85.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
-<polyline points="215,81.48 113,81.48 117,85.48 213,85.48 215,81.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M113 81.48 L113 165.48 L117 161.48 L117 85.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
+<path d="M317 81.48 L215 81.48 L215 83.48 L217 85.48 L313 85.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
+<polyline points="317,81.48 215,81.48 215,83.48 217,85.48 313,85.48 317,81.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M215 81.48 L113 81.48 L117 85.48 L213 85.48 L215 83.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
+<polyline points="215,81.48 113,81.48 117,85.48 213,85.48 215,83.48 215,81.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M113 81.48 L113 165.48 L117 161.48 L117 85.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
 <polyline points="113,81.48 113,165.48 117,161.48 117,85.48 113,81.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M217 161.48 L217 85.48 L213 85.48 L213 161.48 Z" fill="#000" fill-opacity="0.35" fill-rule="evenodd" stroke="none"/>
-<polyline points="217,161.48 217,85.48 213,85.48 213,161.48 217,161.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M217 161.48 L217 85.48 L215 83.48 L213 85.48 L213 161.48 L215 163.48 Z" fill="#000" fill-rule="evenodd" stroke="none"/>
+<polyline points="217,161.48 217,85.48 215,83.48 213,85.48 213,161.48 215,163.48 217,161.48" fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 <polyline points="156,163.48 156,145.48" fill="none" stroke="#000" stroke-width="0.25" stroke-linecap="round" stroke-linejoin="round"/>
 <polyline points="174,163.48 173.654,159.968 172.63,156.592 170.966,153.48 168.728,150.752 166,148.514 162.888,146.85 159.512,145.826 156,145.48" fill="none" stroke="#000" stroke-width="0.13" stroke-linecap="round" stroke-linejoin="round"/>
 <polyline points="115,161.48 115,149.48" fill="none" stroke="#000" stroke-width="0.13" stroke-linecap="round" stroke-linejoin="round"/>
@@ -40,5 +40,11 @@
 <polyline points="114.116,152.364 115.884,150.596" fill="none" stroke="#000" stroke-width="0.13" stroke-linecap="round" stroke-linejoin="round"/>
 <polyline points="214.116,152.364 215.884,150.596" fill="none" stroke="#000" stroke-width="0.13" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="165" y="149.88" font-family="Helvetica, Arial, sans-serif" font-size="2.5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">500</text>
+<text x="165" y="118.98" font-family="Helvetica, Arial, sans-serif" font-size="5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">Living</text>
+<text x="165" y="123.48" font-family="Helvetica, Arial, sans-serif" font-size="3.5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">01</text>
+<text x="165" y="127.98" font-family="Helvetica, Arial, sans-serif" font-size="3.5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">18.2 m²</text>
+<text x="265" y="118.98" font-family="Helvetica, Arial, sans-serif" font-size="5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">Kitchen</text>
+<text x="265" y="123.48" font-family="Helvetica, Arial, sans-serif" font-size="3.5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">02</text>
+<text x="265" y="127.98" font-family="Helvetica, Arial, sans-serif" font-size="3.5" text-anchor="middle" dominant-baseline="middle" fill="#000" stroke="none">18.2 m²</text>
 </g>
 </svg>

@@ -45,7 +45,7 @@ Do not import these:
 | CGAL and Python bindings | Same reason. |
 | `ezdxf`, ODA, FreeCAD | No DXF or DWG in this product. |
 | OpenCascade / `cadquery` | Huge, not needed. |
-| `torch`, `tensorflow` | Phase 17 sidecar only, never the main env. |
+| `torch`, `tensorflow` | Phase 20 sidecar only, never the main env. |
 | `reportlab`, `weasyprint` | No server-side PDF. |
 
 ## TypeScript
@@ -54,7 +54,6 @@ Do not import these:
 | --- | --- |
 | `react`, `react-dom`, `vite`, `typescript` | App shell. |
 | `tailwindcss`, shadcn/ui | UI. Initialize with the CLI. Do not invent a second component kit. |
-| `konva`, `react-konva` | Plan canvas only. |
 | `three`, `@react-three/fiber`, `@react-three/drei` | 3D panel only. |
 | `immer` | Undo patches. |
 | `rbush` | Picking index. |
@@ -63,7 +62,7 @@ Do not import these:
 | `zustand` | Editor UI state, not the plan kernel's history. |
 | `vitest`, `@playwright/test`, `@testing-library/react` | Tests. |
 
-The plan kernel must not depend on `konva`, `react`, or `three`.
+The plan kernel must not depend on `react` or `three`. The editor plan view is plain SVG in React, drawn from `src/drawing/scene.ts`. It needs no canvas library.
 
 ## TypeScript deny list
 

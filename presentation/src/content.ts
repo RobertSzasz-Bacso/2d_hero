@@ -265,7 +265,7 @@ mesh detector. No axis: fit the footprint and add ifc_wall_from_solid.`,
   },
   {
     id: "ml",
-    kicker: "Phase 17",
+    kicker: "Phase 20",
     title: "ML sidecar",
     detail: "Optional, off, not imported",
     status: "planned",
@@ -821,7 +821,7 @@ export const stages: Stage[] = [
       },
       {
         status: "planned",
-        text: "Phase 17, an optional GPU detector, is not started. The classic pipeline is the product.",
+        text: "Phase 20, an optional GPU detector, is not started. The classic pipeline is the product.",
       },
     ],
     graph: "system",
@@ -1004,11 +1004,11 @@ export const stages: Stage[] = [
     eyebrow: "Stage 5 · Today versus the roadmap",
     diagramTitle: "Classic path is the default",
     diagramNote:
-      "Turn on full architecture to see the Phase 17 sidecar. It is specified. It is not in the running app.",
+      "Turn on full architecture to see the Phase 20 sidecar. It is specified. It is not in the running app.",
     summary:
       "Sixteen phases are done, from the security boundary through release. The only scheduled work left is an optional detector that must not become a dependency.",
     purpose:
-      "The roadmap is master_plan.md. Status is binary: done or not started. Phase 17 does not replace the geometry in Stage 3. It may only emit schema v2 and then face the same validators.",
+      "The roadmap is master_plan.md. Status is binary: done or not started. Phase 20 does not replace the geometry in Stage 3. It may only emit schema v2 and then face the same validators.",
     challenges: [
       {
         title: "A GPU the owner may not have",
@@ -1026,7 +1026,7 @@ export const stages: Stage[] = [
     decisions: [
       {
         title: "Off unless the owner asks",
-        body: "Phase 17's own prompt says to stop unless the owner explicitly asked for the ML phase. The setting defaults off. No import, no download.",
+        body: "Phase 20's own prompt says to stop unless the owner explicitly asked for the ML phase. The setting defaults off. No import, no download.",
       },
       {
         title: "Libraries stay on a list",

@@ -156,9 +156,15 @@ def wall_polygons(plan: Any, level_id: str) -> list[dict[str, Any]]:
             continue
         _join_cluster(level, geom_end, cluster, corners)
 
+    def hub(wall_id: str, end: str) -> Any:
+        cluster = cluster_by_end[f"{wall_id}:{end}"]
+        if cluster["host"] is None and len(cluster["ends"]) >= 3:
+            return cluster["joint"]
+        return None
+
     polygons: list[dict[str, Any]] = []
     for wall in level.walls:
-        ring = _square_or_joined(wall, geom_end, corners[wall.id])
+        ring = _square_or_joined(wall, geom_end, hub, corners[wall.id])
         if ring is not None:
             polygons.append({"wallId": wall.id, "ring": ring})
 
@@ -186,8 +192,10 @@ def wall_polygons(plan: Any, level_id: str) -> list[dict[str, Any]]:
     return polygons
 
 
-def _square_or_joined(wall: Any, geom_end: Any, corners: dict[str, dict[str,
+def _square_or_joined(wall: Any, geom_end: Any, hub: Any, corners: dict[str, dict[str,
     Any]]) -> list[dict[str, float]] | None:
+    """Where three or more walls meet, the ring passes through the joint so the
+    union has no gap between collinear neighbours."""
     a = geom_end(wall.id, "a")
     b = geom_end(wall.id, "b")
     direction = unit(sub(b, a))
@@ -201,12 +209,16 @@ def _square_or_joined(wall: Any, geom_end: Any, corners: dict[str, dict[str,
         sign = 1 if side == "left" else -1
         return add(origin, mul(normal, sign * half))
 
+    hub_a = hub(wall.id, "a")
+    hub_b = hub(wall.id, "b")
     ring = dedupe_ring(
         [
             corners["a"]["right"] or cap("a", "right"),
             corners["b"]["right"] or cap("b", "right"),
+            *([hub_b] if hub_b is not None else []),
             corners["b"]["left"] or cap("b", "left"),
             corners["a"]["left"] or cap("a", "left"),
+            *([hub_a] if hub_a is not None else []),
         ]
     )
     return ring if len(ring) >= 3 else None

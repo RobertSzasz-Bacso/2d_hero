@@ -33,7 +33,10 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 14 — IFC import — `done`
 - [x] Phase 15 — AI assistant — `done`
 - [x] Phase 16 — Hardening and release — `done`
-- [ ] Phase 17 — Optional machine-learning detectors — `not started`
+- [x] Phase 17 — Architectural plan view — `done`
+- [ ] Phase 18 — Direct editing with grips — `not started`
+- [ ] Phase 19 — Drawing tools — `not started`
+- [ ] Phase 20 — Optional machine-learning detectors — `not started`
 
 ## Decisions that every phase keeps
 
@@ -46,7 +49,7 @@ These were chosen with the owner. Do not reopen them inside a phase. If one is i
 - **The Cursor API key** is typed in Settings and stored in Windows Credential Manager through the `keyring` library. It is never written to the repo, to logs, to `plan.json`, or to an HTTP response. The app works fully with no key.
 - **Security.** Every `/api` route except `GET /api/health` requires header `X-Hero-Token`. The token is a process secret. The server rejects a `Host` other than `127.0.0.1` or `localhost`.
 - **One plan document, schema v2, meters.** Specified in [docs/plan-schema.md](docs/plan-schema.md). Pydantic is the source of truth. TypeScript types are generated. Walls are a centerline plus a thickness. Rooms are computed from wall geometry and anchored by a seed point. The 2D plan axis is X right, Y up (not screen Y).
-- **Detection** is classic geometry, shared by meshes and point clouds, specified in [docs/algorithms.md](docs/algorithms.md). Machine learning is Phase 17 and off unless the owner turns it on.
+- **Detection** is classic geometry, shared by meshes and point clouds, specified in [docs/algorithms.md](docs/algorithms.md). Machine learning is Phase 20 and off unless the owner turns it on.
 - **PDF only.** No DXF, DWG, SVG export, or IFC export. SVG is allowed as an internal snapshot for tests and for the AI review image.
 - **Drawing standard** is metric European (ISO 128, 5457, 3098, 7200), in [docs/drawing-standard.md](docs/drawing-standard.md). Dimension text defaults to centimetres. Areas are square metres.
 - **Libraries** are the allow-list in [docs/libraries.md](docs/libraries.md). Do not add a package that is not listed without a one-line reason in `docs/decisions.md`.
@@ -692,7 +695,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-14
 - The UI shows a preview of the ops (changed geometry highlighted). Accept applies them as one undo step. Reject discards them.
 - Missing key: the panel explains how to open Settings. No crash, no cloud agent, no silent env-only path. An env var is not required and is not read if a key is stored. If no key is stored, the feature stays off even if `CURSOR_API_KEY` happens to exist, so tests and the owner's shell cannot leak a key into the app by accident. The Settings key is the only key.
 
-**Out:** Phase 17 models. Free-text JSON plan replacement.
+**Out:** Phase 20 models. Free-text JSON plan replacement.
 
 **Tests first**
 
@@ -736,7 +739,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-15
 - `scripts/install-shortcut.ps1` creates a Desktop shortcut that runs the app and opens the browser.
 - Rewrite the user-facing `README.md` as a short guide: install, start, save a key, import, edit, export PDF, where projects live.
 
-**Out:** new feature areas, Phase 17.
+**Out:** new feature areas, Phase 20.
 
 **Tests first**
 
@@ -764,11 +767,157 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-16
 
 ---
 
-## Phase 17 — Optional machine-learning detectors
+## Phase 17 — Architectural plan view
+
+**Status:** `done`
+
+**Requires:** Phase 16 done.
+
+**Goal:** the editor screen looks like the printed construction plan, and every element is clicked on its own shape.
+
+**In**
+
+- `apps/web/src/drawing/scene.ts`: a pure function from a plan level to scene items in plan metres. Each item names its element (`wall`, `opening`, `column`, `stair`, `fixture`, `separator`, `dimension`, `room`, `text`) and its role and weight from [docs/drawing-standard.md](docs/drawing-standard.md): poche with openings cut out, door leaf and swing, window glass, stairs, columns, symbols, separators, dimension chains, room tags.
+- `compile.ts` builds its model commands from the scene. The PDF and the screen share one geometry path.
+- Solid black poche on screen, in the SVG snapshot, and in the PDF, as the drawing standard now says.
+- `apps/web/src/editor/PlanSvg.tsx` replaces the Konva stage. One SVG, the camera as one transform, Y flipped only in the view. Line weights and text sizes follow the "Screen view" section of the drawing standard.
+- Hit testing on the real shapes: wall poche, opening, fixture, column, stair, room face, dimension text. Thin lines get an invisible hit stroke of `snap_px`. Hover outline and selection highlight. The HTML button overlay is deleted. The data attributes the tests read (`data-x`, `data-length`, `data-angle`, `data-thickness`) move onto the SVG elements.
+- Redraw the 12 symbols in `apps/web/src/editor/symbols.ts` with the parts listed in the drawing standard. No new symbol ids.
+- Remove `konva` and `react-konva`. Update `docs/libraries.md` and `.cursor/rules/web-frontend.mdc`.
+
+**Out:** grips, temporary dimensions, new tools, schema changes.
+
+**Tests first**
+
+- Screen weights: 0.50 mm at 1:50 and 100 px/m is 2.5 px. 0.13 mm at 1:50 and 20 px/m clamps to 1 px. Room-name text (5 mm) at 1:50 and 100 px/m is 25 px. Dimension text (2.5 mm) at 1:50 and 20 px/m clamps to 10 px.
+- Scene of the golden two-room plan: each door swing arc has a radius equal to its leaf width within 1 mm; each window gives two 0.25 mm lines and one 0.13 mm line; each wall's poche area equals its wall polygon area minus its opening rectangles within 0.001 m²; poche items are solid black.
+- Phase 6 compiler tests keep their numbers: 10.00 m at 1:50 is 200 mm within 0.5 mm, cut walls are 0.50 mm, 4.20 m displays as `420`. The golden SVG is regenerated for the solid wall fill and for the three-way joint fix below. The PDF carries no 0.35 fill alpha.
+- `shared/vectors/rooms-three-way-joint.json`: two collinear walls and a partition meeting at one vertex leave no gap in the poche, so both rooms of the golden plan are found at 18.24 m² each within 0.01. TypeScript and Python pass it.
+- Every symbol stays inside the unit square −0.5 to 0.5 and has the part count listed in the drawing standard.
+- Playwright: the plan has no `button[data-wall-id]`; a wall `path[data-wall-id]` fills `rgb(0, 0, 0)`; hovering sets `data-hover="true"`; clicking selects it and the properties panel shows its thickness; a door has a `[data-role="swing"]` element. The Phase 4, 5, and 15 flows keep their assertions against the SVG shapes (no save during the move, one save after pointer-up, the east wall within 1° of 90°).
+
+**Acceptance:** the two-room fixture on screen shows black walls with door swings and window glass, and the compiler tests are unchanged except the documented fill.
+
+### Prompt
+
+```text
+Implement Phase 17 of 2D Hero in C:\prod\2d_hero. One phase only. Do not start Phase 18.
+
+Read first: AGENTS.md, docs/handoff/phase-16.md, master_plan.md (Phase 17), docs/drawing-standard.md (all of it, including Screen view and the symbol parts), docs/architecture.md (Editor behavior), docs/decisions.md (SVG plan view, solid poche), .cursor/rules/web-frontend.mdc, .cursor/rules/drawing-standard.mdc.
+
+Move the model geometry out of apps/web/src/drawing/compile.ts into a pure scene builder, apps/web/src/drawing/scene.ts, and make the compiler use it. Replace the Konva stage with an SVG plan view that renders the same scene through the camera. Hit-test on the real shapes and delete the HTML button overlay. Redraw the 12 symbols. Remove konva and react-konva.
+
+Tests first, as listed under Phase 17. Run them and keep the failures. Do not change the Phase 6 numeric assertions. Regenerate the golden SVG only for the solid fill and the three-way joint fix.
+
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-17.md. Commit message: "Phase 17: architectural plan view". Do not push.
+```
+
+---
+
+## Phase 18 — Direct editing with grips
 
 **Status:** `not started`
 
-**Requires:** Phase 16 done. Do not start this unless the owner asks.
+**Requires:** Phase 17 done.
+
+**Goal:** a selected element is edited the way architectural software does it: grips, temporary dimensions you can type into, flip controls.
+
+**In**
+
+- Wall grips: two end grips (move the vertex, snapping applies), a middle grip (`moveWall`), and two face grips. A face grip moves that face and keeps the opposite face fixed (`setWallThicknessFromFace`). Alt keeps the centerline fixed instead.
+- Temporary dimensions for a selected wall: its length, and the face-to-face clear distance to the nearest parallel wall on each side. Click one and type a value (`setClearDistance` or `applyTypedDimension`). They are not stored in the plan.
+- Opening grips: a center grip slides the opening along the wall and moves it to another wall when released over one (`rehostOpening`); two edge grips change the width with the other edge fixed (`setOpeningEdge`); a hinge flip control (left and right) and a side flip control (`swingSide`).
+- Fixture grips: move, rotate in 15° steps (Shift rotates freely), resize width and depth. A fixture released within `snap_px` of a wall face turns its back to that face and touches it.
+- Room: click a room face to select it; double-click edits the name in place.
+- Right-click menu (shadcn `context-menu`): delete, split wall here, merge collinear, flip hinge, flip side.
+- Arrow keys move the selection by the grid step (`moveSelection`), Shift by ten steps.
+- Box selection: left to right selects items fully inside (window); right to left also selects items it touches (crossing).
+- A snap glyph shows the snap kind that won.
+- Every new kernel operation has a JSON case in `shared/vectors/` and a port in `apps/api/src/hero/planops/`, because the Python suite runs every vector.
+
+**Out:** new drawing tools, schema changes.
+
+**Tests first**
+
+On the 5.00 × 4.00 m example with 0.20 m walls:
+
+- `setWallThicknessFromFace`: the south wall to 0.30 m by its outer face keeps the net area at 18.24 m² within 0.01. Symmetric (centerline fixed): 4.80 × 3.75 = 18.00 m² within 0.01.
+- `setClearDistance`: a clear width of 4.00 m between the west and east inner faces lands within 1 mm, the moved wall stays within `ortho_deg` of orthogonal, net area 4.00 × 3.80 = 15.20 m² within 0.01.
+- `setOpeningEdge`: the 0.90 m door, end edge moved 0.10 m outward, is 1.00 m wide within 1 mm and its start edge did not move by more than 1 mm.
+- `rehostOpening`: the door moved to the east wall keeps 0.90 m. A 4.50 m opening onto the 4.00 m east wall is rejected and the plan is unchanged.
+- `moveSelection` by (0.10, 0) moves the selected vertices by exactly that vector.
+- Window selection returns only items fully inside the box. Crossing selection also returns items that touch it.
+- Fixture rotation from the grip without Shift is a multiple of 15°.
+- Playwright: a selected wall shows five grips; dragging its outer face grip thickens the wall and leaves the room area text unchanged; typing `400` into a temporary dimension gives a clear width of 400 cm; the door flip control toggles `data-swing-side`; each grip drag saves once, after pointer-up, never during the move.
+
+**Acceptance:** the Playwright grip flow passes and `test_planops.py` passes every new vector.
+
+### Prompt
+
+```text
+Implement Phase 18 of 2D Hero in C:\prod\2d_hero. One phase only. Do not start Phase 19.
+
+Read first: AGENTS.md, docs/handoff/phase-17.md, master_plan.md (Phase 18), docs/architecture.md (Editor behavior), docs/algorithms.md (Editor geometry, Snapping), docs/drawing-standard.md (Screen view), .cursor/rules/web-frontend.mdc.
+
+Add grips, temporary dimensions, opening flip controls, fixture rotate and resize grips, room selection and in-place rename, a context menu, nudging, and window versus crossing box selection on the Phase 17 SVG view. Every geometry change goes through a kernel operation in apps/web/src/core/, with a shared vector and a Python planops port.
+
+Tests first, as listed under Phase 18. Run them and keep the failures.
+
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-18.md. Commit message: "Phase 18: direct editing with grips". Do not push.
+```
+
+---
+
+## Phase 19 — Drawing tools
+
+**Status:** `not started`
+
+**Requires:** Phase 18 done.
+
+**Goal:** drawing a plan from scratch feels like a CAD tool: live previews, typed values at the cursor, guides, and a symbol library.
+
+**In**
+
+- Wall tool: a live poche preview from the last point to the cursor with a length and angle label; typed length and angle at the cursor (Tab switches the field, Enter applies); Shift locks to 0° or 90°; thickness presets 10, 12.5, 15, 20, 25, 30, 36.5 cm and a custom value; location line centre, left face, or right face (an editor setting, not stored); dashed alignment guides from the alignment snap.
+- Rectangle tool: drag two corners, or type width and depth. Mode interior (the rectangle is the clear room) or centerline.
+- Door and window placement: a ghost at true width follows the cursor on the hovered wall, with live distances from its edges to the nearest faces. A typed distance places the near edge that far from the nearer inner corner. The swing side is the side of the wall the cursor is on.
+- Symbol library panel: thumbnails drawn from `symbols.ts`, drag and drop onto the plan, R rotates 90° while placing.
+- Dimension tool: click two vertices or opening edges, then the offset. Stores a dimension with `auto: false`.
+
+**Out:** schema changes, new symbol ids, DXF.
+
+**Tests first**
+
+- Location line: a wall from (0, 0) to (5, 0), 0.20 m, location left face, has its centerline at y = −0.10 within 1e-9.
+- Rectangle by interior 4.80 × 3.80 m with 0.20 m walls: centerlines 5.00 × 4.00 m and net area 18.24 m² within 0.01.
+- `shared/vectors/snap-alignment.json`: a cursor within `snap_px` of an existing vertex's x snaps to that x, and alignment ranks after extension and before angle lock. TypeScript and Python both pass it.
+- A door placed with a typed 100 cm has its near edge 1.00 m from the inner face within 1 mm.
+- A manual dimension between two vertices is stored with `auto: false` and those vertex ids, and survives a reload.
+- Playwright: draw a 480 × 380 interior rectangle with typed sizes and see `18.2 m²`; place a door with a typed distance; drag a sofa from the library onto the plan; add a manual dimension; reload and the plan is unchanged.
+
+**Acceptance:** the Playwright drawing flow passes, and a plan drawn only with these tools exports a PDF.
+
+### Prompt
+
+```text
+Implement Phase 19 of 2D Hero in C:\prod\2d_hero. One phase only. Do not start Phase 20.
+
+Read first: AGENTS.md, docs/handoff/phase-18.md, master_plan.md (Phase 19), docs/architecture.md (Editor behavior), docs/algorithms.md (Editor geometry, Snapping), docs/drawing-standard.md, .cursor/rules/web-frontend.mdc.
+
+Upgrade the wall tool (live preview, typed length and angle, ortho lock, thickness presets, location line, alignment guides), add the rectangle tool, ghost placement for doors and windows with typed distances, a symbol library with drag and drop, and a manual dimension tool. Geometry goes through kernel operations with shared vectors and the Python port.
+
+Tests first, as listed under Phase 19. Run them and keep the failures.
+
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-19.md. Commit message: "Phase 19: drawing tools". Do not push.
+```
+
+---
+
+## Phase 20 — Optional machine-learning detectors
+
+**Status:** `not started`
+
+**Requires:** Phase 19 done. Do not start this unless the owner asks.
 
 **Goal:** an optional GPU detector can propose walls, without becoming a dependency of the normal install.
 
@@ -793,13 +942,13 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-16
 ### Prompt
 
 ```text
-Implement Phase 17 of 2D Hero in C:\prod\2d_hero only if the owner explicitly asked for the optional ML phase. Otherwise stop.
+Implement Phase 20 of 2D Hero in C:\prod\2d_hero only if the owner explicitly asked for the optional ML phase. Otherwise stop.
 
-Read first: AGENTS.md, docs/handoff/phase-16.md, master_plan.md (Phase 17), docs/algorithms.md (Metrics), docs/libraries.md, docs/decisions.md.
+Read first: AGENTS.md, docs/handoff/phase-19.md, master_plan.md (Phase 20), docs/algorithms.md (Metrics), docs/libraries.md, docs/decisions.md.
 
 Add an optional detector sidecar that is off by default and is not imported by the main app. Output must be schema v2 and must go through the normal validators. Document the model licence and download size. Do not remove or bypass the classic pipeline.
 
 Tests first: torch is not imported when the setting is off; invalid sidecar JSON is rejected; GPU tests skip without a GPU. The default test run must pass with no weights downloaded.
 
-Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-17.md. Commit message: "Phase 17: optional ML detectors". Do not push.
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-20.md. Commit message: "Phase 20: optional ML detectors". Do not push.
 ```

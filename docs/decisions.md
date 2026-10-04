@@ -37,7 +37,7 @@ Reason: A stored room polygon goes stale the moment a wall moves. A centerline-o
 
 ## 2026-10-04 — Classic geometry first
 
-Decision: Deterministic geometry is the pipeline. Machine learning is an optional Phase 17 sidecar, off by default, and not imported by the main app.
+Decision: Deterministic geometry is the pipeline. Machine learning is an optional Phase 20 sidecar, off by default, and not imported by the main app.
 Reason: The owner may not have a CUDA GPU. The classic result has to be explainable and testable without a weight download.
 
 ## 2026-10-04 — API key in Credential Manager
@@ -79,6 +79,31 @@ Reason: `docs/testing.md` requires `check.ps1` to run ruff and pyright. `docs/li
 
 Decision: When floor and ceiling peaks do not pair, the import keeps one level at the strongest floor peak (or the lowest point) with an assumed ceiling height of 2.7 m and issue `ceiling_missing`.
 Reason: A real scan can have a floor and no reliable ceiling peak. Dropping the storey left the editor with an empty plan and a blank view.
+
+## 2026-10-04 — SVG plan view replaces Konva
+
+Decision: The editor draws the plan as one SVG in React, built from the same scene items as the PDF compiler (`apps/web/src/drawing/scene.ts`). Every element is hit-tested on its own shape. `konva` and `react-konva` are removed. No other canvas library is added.
+Reason: The Konva view drew lighter placeholder graphics and used floating HTML buttons as hit targets, so the screen did not look like the plan and elements could not be clicked where they are. SVG gives per-shape events, crisp lines at any zoom, and DOM attributes Playwright can read. A floor plan is a few thousand shapes at most.
+
+## 2026-10-04 — Solid black poche
+
+Decision: Cut walls and columns are filled solid black on screen, in the SVG snapshot, and in the PDF. This replaces the 35% grey fill.
+Reason: The owner's reference plans use solid black walls. The golden SVG from Phase 6 is regenerated for this fill only.
+
+## 2026-10-04 — Three-way wall joints pass through the joint
+
+Decision: When three or more wall ends meet at one vertex, each wall polygon passes through the joint point. TypeScript and Python both do this, and `shared/vectors/rooms-three-way-joint.json` holds it. The Phase 6 golden SVG is regenerated with the solid fill, these joint points, and the two room tags that now appear.
+Reason: Found in Phase 17. Two collinear walls with a partition between them left a triangular hole at the joint. The union of the golden two-room plan then had no free faces, so it drew no room tags and showed a white notch in the wall.
+
+## 2026-10-04 — Symbols redrawn, same ids
+
+Decision: The 12 symbol ids stay. Their drawings get the parts listed in `docs/drawing-standard.md` (pillows, cushions, arms, tank and seat, burner rings). No new ids, no schema change, no downloaded artwork.
+Reason: Owner's choice. Detection and IFC import already map to these ids.
+
+## 2026-10-04 — Editor phases before machine learning
+
+Decision: Phases 17 (architectural plan view), 18 (direct editing with grips), and 19 (drawing tools) are added. The optional machine-learning phase becomes Phase 20.
+Reason: The owner needs an editor that behaves like architectural software before an optional detector. The owner asked for Phases 17 to 19 to be implemented in one session.
 
 ## 2026-10-04 — Net area of the 5 m by 4 m example
 
