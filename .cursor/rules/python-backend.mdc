@@ -1,0 +1,25 @@
+---
+description: Python backend conventions for the hero package
+globs: apps/api/**/*.py
+alwaysApply: false
+---
+
+# Python backend
+
+- Python 3.12, package `hero`, uv, `src` layout. Type hints on public functions.
+- Pydantic v2 models are the schema. Use `model_validate`, not a hand-rolled dict check.
+- Paths are `pathlib`. Writes are temp file + `os.replace` in the same directory.
+- Numeric work is NumPy. No Python loop over point clouds.
+- One heavy job at a time, in a process pool. Route handlers return quickly.
+- Bind `127.0.0.1` only. Every `/api` route except `GET /api/health` requires `X-Hero-Token` and a local `Host`.
+- Tests use `tmp_path` and an in-memory keyring. They never touch `Documents\2D Hero` or the real Credential Manager.
+
+```python
+# Bad
+open(path, "w").write(text)
+
+# Good
+tmp = path.with_suffix(".tmp")
+tmp.write_text(text, encoding="utf-8")
+os.replace(tmp, path)
+```

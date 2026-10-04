@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 data/
 apps/web/node_modules/
 apps/web/dist/
@@ -12,3 +13,9 @@ apps/web/playwright-report/
 apps/web/blob-report/
 *.log
 .DS_Store
+apps/api/.session-token
+.session-token
+samples/user/*
+!samples/user/.gitkeep
+samples/public/*
+!samples/public/.gitkeep

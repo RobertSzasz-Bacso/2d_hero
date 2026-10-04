@@ -1,0 +1,71 @@
+# Decisions
+
+Choices already made with the owner. A phase does not reverse one of these. Add a new entry only when a phase has to choose something the specs left open, or when a real sample forces a named exception.
+
+Format:
+
+```text
+## YYYY-MM-DD — short title
+Decision:
+Reason:
+```
+
+## 2026-10-04 — Rebuild, do not extend the prototype
+
+Decision: Delete the pre-Phase-1 application in Phase 1 and replace it. Keep `fixtures/` and `docs/research/` only as background.
+Reason: The prototype's plan was a centerline sketch from one slice. It is not a construction drawing, and the editor fought the user.
+
+## 2026-10-04 — Local web app
+
+Decision: Browser UI plus a local Python API. A desktop shortcut in Phase 16. No installer, no Tauri, no accounts.
+Reason: The geometry libraries we need exist on Python for Windows. The owner runs one PC.
+
+## 2026-10-04 — Sources and scale
+
+Decision: Support iPhone LiDAR meshes (glTF, OBJ, USDZ), Matterport-style OBJ and E57, terrestrial E57/LAS/LAZ, downloaded meshes, and IFC. Single rooms through large sites. Stream large clouds for a 16 GB machine.
+Reason: Those are the files the owner actually has. The upper size is unknown, so the pipeline must not assume the cloud fits in RAM.
+
+## 2026-10-04 — Metric European sheet, PDF only
+
+Decision: ISO-style metric sheet, dimension text in centimetres, areas in m². Export PDF only.
+Reason: The owner asked for a construction drawing they can edit and print, not a CAD hand-off.
+
+## 2026-10-04 — Plan model
+
+Decision: Schema v2. Walls are centerline plus thickness. Rooms are computed net faces anchored by a seed. One document for the editor, the detector, the PDF, and the AI tools.
+Reason: A stored room polygon goes stale the moment a wall moves. A centerline-only model cannot draw poche or true thickness.
+
+## 2026-10-04 — Classic geometry first
+
+Decision: Deterministic geometry is the pipeline. Machine learning is an optional Phase 17 sidecar, off by default, and not imported by the main app.
+Reason: The owner may not have a CUDA GPU. The classic result has to be explainable and testable without a weight download.
+
+## 2026-10-04 — API key in Credential Manager
+
+Decision: The Cursor key is entered in Settings and stored with `keyring` (Windows Credential Manager). The process does not read `CURSOR_API_KEY`. The app works with no key.
+Reason: The owner asked for a place in the UI that saves the key safely on Windows. An env var is easy to leak into logs and into tests.
+
+## 2026-10-04 — AI proposes, the owner accepts
+
+Decision: The agent edits only through MCP tools. The UI previews the ops. Accept is one undo step. Reject discards them.
+Reason: A model that returns a whole new plan JSON can silently destroy the drawing.
+
+## 2026-10-04 — Projects on disk
+
+Decision: One folder per project in `Documents\2D Hero\`, recent list in `%APPDATA%\2D Hero`. Samples the owner drops in `samples/user/` stay git-ignored.
+Reason: The owner wants files on this PC, not an account. Real scans are large and private.
+
+## 2026-10-04 — English UI, commits on main
+
+Decision: English only, no i18n library. Each phase commits on `main` and does not push.
+Reason: Owner's choices for language and git.
+
+## 2026-10-04 — TypeScript 6 path alias
+
+Decision: `apps/web` maps `@/*` to `./src/*` and does not set `baseUrl`.
+Reason: The shadcn Vite install page still shows `baseUrl`. TypeScript 6.0 rejects that option (`TS5101`) during `tsc --noEmit`. With `baseUrl` omitted, the alias still resolves.
+
+## 2026-10-04 — Phase 1 toolchain packages
+
+Decision: `ruff` and `pyright` are dev dependencies of `apps/api`. The Vite React template keeps `oxlint`. The web app keeps every package `shadcn init` installed (`tailwindcss`, `@tailwindcss/vite`, `radix-ui`, `class-variance-authority`, `cn`, `lucide-react`, `tw-animate-css`, `@fontsource-variable/geist`, and the `shadcn` CLI package). Tests keep using `httpx`.
+Reason: `docs/testing.md` requires `check.ps1` to run ruff and pyright. `docs/libraries.md` says to initialize shadcn/ui with its CLI, and that CLI installed those packages for the radix-nova preset. Starlette warns that `httpx` is deprecated in favor of `httpx2`; `httpx2` is not on the library list.

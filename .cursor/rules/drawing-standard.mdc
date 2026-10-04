@@ -1,0 +1,20 @@
+---
+description: Metric European sheet rules for the drawing compiler and PDF
+globs: apps/web/src/drawing/**/*.ts,apps/web/src/drawing/**/*.tsx,apps/web/src/pdf/**/*.ts,apps/web/src/pdf/**/*.tsx
+alwaysApply: false
+---
+
+# Drawing standard
+
+Follow `docs/drawing-standard.md`.
+
+- Line weights are millimetres on paper: cut walls 0.50, visible edges 0.25, dimensions and hatches 0.13.
+- At 1:50, a 10.00 m wall is 200 mm on the sheet. Do not scale by screen pixels.
+- Dimension text is centimetres by default (`420`, not `4.20 m`). Areas are `m²` with one decimal on the tag.
+- Wall fill is solid poche from the join polygons, with openings cut out. Do not stroke centerlines as the finished wall.
+- Title block fields come from the plan and the saved defaults. Do not hard-code the owner's name.
+
+```text
+# Bad: strokeWidth = 3  (screen pixels)
+# Good: strokeMm = 0.50, then mm * (pagePx / paperMm)
+```

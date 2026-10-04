@@ -1,0 +1,24 @@
+---
+description: Write the failing test before the implementation
+alwaysApply: true
+---
+
+# Tests first
+
+For the current phase in `master_plan.md`:
+
+1. Write the tests listed there, with the real numbers (IoU, centimetres, HTTP status).
+2. Run them and confirm they fail because the behavior is missing.
+3. Then implement.
+
+```text
+# Bad: change the test so the old code passes
+assert room_iou >= 0.5  # was 0.95
+
+# Good: keep 0.95 and fix the detector, or stop and report the measured IoU
+assert room_iou >= 0.95
+```
+
+- Do not delete, skip, or loosen a test to go green. A missing file in `samples/user/` or `samples/public/` is the only allowed skip.
+- Do not mock the function you are supposed to write. Mock only network, the real Windows Credential Manager, and native file dialogs.
+- Thresholds live in the spec. Copy them. Do not invent a new one in the test.

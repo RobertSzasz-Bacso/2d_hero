@@ -1,0 +1,20 @@
+{
+  "samples": [
+    {
+      "file": "two_social_rooms_in_a_ruined_building.glb",
+      "source": "user",
+      "kind": "mesh",
+      "notes": "Ruined building with two social rooms. No tape measurements yet.",
+      "levels": null,
+      "references": []
+    },
+    {
+      "file": "Duplex_A_20110907.ifc",
+      "source": "public",
+      "kind": "ifc",
+      "notes": "buildingSMART duplex apartment. Attribution required. See samples/README.md.",
+      "levels": 2,
+      "references": []
+    }
+  ]
+}

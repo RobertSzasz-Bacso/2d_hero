@@ -1,0 +1,20 @@
+---
+description: 2D Hero — read the current phase and the specs before writing code
+alwaysApply: true
+---
+
+# 2D Hero
+
+Local Windows app: a 3D scan or IFC model becomes an editable metric construction floor plan and a scaled PDF.
+
+Before editing:
+
+1. Read `AGENTS.md`.
+2. In `master_plan.md`, find the first phase that is not `done`. Implement only that phase.
+3. Read the newest `docs/handoff/phase-NN.md` if one exists.
+4. Read the docs that phase names. `docs/*.md` overrides `docs/research/` and the old prototype.
+
+- Do not add files for later phases, and do not leave a stub that pretends a feature works.
+- Plan coordinates are metres. 3D is Z up. 2D plan Y is up. Flip Y only in the view transform.
+- Verify a library call in the installed package or its docs before using it.
+- Never put the Cursor API key in the repo, logs, or HTTP bodies.

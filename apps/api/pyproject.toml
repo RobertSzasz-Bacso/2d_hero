@@ -1,37 +1,56 @@
 [project]
 name = "hero"
 version = "0.1.0"
-description = "Local service that drafts 2D floor plans from meshes, USDZ, IFC, and point clouds."
-requires-python = ">=3.11"
+description = "Local API for 2D Hero"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-  "fastapi>=0.115.0",
-  "uvicorn>=0.32.0",
-  "python-multipart>=0.0.12",
-  "trimesh>=4.5.0",
-  "numpy>=2.0.0",
-  "pyclipr>=0.1.0",
-  "ifcopenshell>=0.8.0",
-  "reportlab>=4.2.0",
-  "pydantic>=2.9.0",
-  "laspy>=2.7.0",
-  "pye57>=0.4.19",
-]
-
-[project.optional-dependencies]
-dev = [
-  "pytest>=8.3.0",
-  "httpx>=0.27.0",
+    "fastapi>=0.142.2",
+    "ifcopenshell>=0.9.0",
+    "keyring>=25.7.0",
+    "laspy>=2.7.0",
+    "lazrs>=0.8.2",
+    "numpy>=2.5.3",
+    "open3d>=0.20.0",
+    "opencv-python-headless>=5.0.0.93",
+    "platformdirs>=4.12.3",
+    "pydantic>=2.13.5",
+    "pye57>=0.4.19",
+    "python-multipart>=0.0.32",
+    "shapely>=2.1.2",
+    "trimesh>=5.1.1",
+    "usd-core>=26.8",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 hero = "hero.__main__:main"
 
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["src", "tests"]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"

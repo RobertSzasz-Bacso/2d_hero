@@ -1,0 +1,15 @@
+# Large and binary scans. Agents can still read these files.
+# This only keeps them out of the search index.
+
+samples/user/
+samples/public/
+apps/api/data/
+docs/research/
+**/*.glb
+**/*.gltf
+**/*.usdz
+**/*.e57
+**/*.las
+**/*.laz
+**/*.ply
+**/*.ifc
