@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from platformdirs import user_config_dir
+from platformdirs import user_config_dir, user_documents_dir
 
 
 def api_root() -> Path:
@@ -23,6 +23,11 @@ def web_dist() -> Path:
 def default_session_file() -> Path:
     """Git-ignored token file the Vite dev proxy reads."""
     return api_root() / ".session-token"
+
+
+def default_projects_dir() -> Path:
+    """One folder per project. On Windows this is ``Documents\\2D Hero``."""
+    return Path(user_documents_dir()) / "2D Hero"
 
 
 def app_config_dir() -> Path:

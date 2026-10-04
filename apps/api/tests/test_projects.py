@@ -1,0 +1,245 @@
+"""Project folders, atomic plan writes, revision conflicts, and the recent list."""
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+def _headers(token: str) -> dict[str, str]:
+    return {"X-Hero-Token": token}
+
+
+def _no_dialog() -> str | None:
+    raise AssertionError("Tests must not open a native file dialog.")
+
+
+def _make_app(tmp_path: Path, token: str, *, open_file=_no_dialog):
+    from hero.app import create_app
+
+    projects = tmp_path / "projects"
+    config = tmp_path / "config"
+    app = create_app(
+        token=token,
+        config_dir=config,
+        projects_dir=projects,
+        session_file=tmp_path / ".session-token",
+        open_file=open_file,
+    )
+    return app, projects, config
+
+
+def _client(tmp_path: Path, token: str, *, open_file=_no_dialog):
+    app, projects, config = _make_app(tmp_path, token, open_file=open_file)
+    return TestClient(app, base_url="http://127.0.0.1"), projects, config
+
+
+def test_save_reload_and_revision_conflict(tmp_path: Path, token: str) -> None:
+    source = tmp_path / "scan.glb"
+    source.write_bytes(b"glb")
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "House"},
+            headers=_headers(token),
+        )
+        assert created.status_code == 200
+        body = created.json()
+        project_id = body["id"]
+        assert body["linkedPath"]
+        assert Path(body["folder"]).is_relative_to(projects)
+        assert not any((projects / project_id).glob("source.*"))
+
+        loaded = client.get(f"/api/projects/{project_id}/plan", headers=_headers(token))
+        assert loaded.status_code == 200
+        plan = loaded.json()
+        assert plan["revision"] == 0
+        assert plan["project"]["name"] == "House"
+
+        plan["project"]["name"] = "House renamed"
+        plan["revision"] = 99
+        saved = client.put(
+            f"/api/projects/{project_id}/plan",
+            json=plan,
+            headers={**_headers(token), "If-Match": "0"},
+        )
+        assert saved.status_code == 200
+        assert saved.json()["revision"] == 1
+        assert saved.json()["project"]["name"] == "House renamed"
+
+        reloaded = client.get(f"/api/projects/{project_id}/plan", headers=_headers(token))
+        assert reloaded.json()["revision"] == 1
+        assert reloaded.json()["project"]["name"] == "House renamed"
+
+        conflict = client.put(
+            f"/api/projects/{project_id}/plan",
+            json=plan,
+            headers={**_headers(token), "If-Match": "0"},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["plan"]["revision"] == 1
+        assert conflict.json()["plan"]["project"]["name"] == "House renamed"
+        on_disk = json.loads((projects / project_id / "plan.json").read_text(encoding="utf-8"))
+        assert on_disk["revision"] == 1
+
+
+def test_failed_replace_leaves_the_previous_plan_readable(tmp_path: Path, monkeypatch) -> None:
+    from hero.schema import Plan
+
+    source = tmp_path / "scan.glb"
+    source.write_bytes(b"glb")
+    from hero.projects import ProjectStore
+
+    store = ProjectStore(projects_dir=tmp_path / "projects", config_dir=tmp_path / "config")
+    created = store.create_linked(str(source), name="House")
+    plan_path = store.project_dir(created.id) / "plan.json"
+    original = plan_path.read_text(encoding="utf-8")
+    real_replace = os.replace
+
+    def fail_plan_replace(src, dst) -> None:
+        if Path(dst).name == "plan.json":
+            raise OSError("replace failed")
+        real_replace(src, dst)
+
+    monkeypatch.setattr("hero.atomic.os.replace", fail_plan_replace)
+    plan = store.read_plan(created.id)
+    plan.project.name = "Changed"
+    with pytest.raises(OSError):
+        store.save_plan(created.id, plan, if_match=0)
+
+    reread = plan_path.read_text(encoding="utf-8")
+    assert reread == original
+    assert Plan.model_validate_json(reread).project.name == "House"
+    assert Plan.model_validate_json(reread).revision == 0
+
+
+def test_previous_plan_and_twenty_snapshots(tmp_path: Path, token: str) -> None:
+    source = tmp_path / "scan.glb"
+    source.write_bytes(b"glb")
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "House"},
+            headers=_headers(token),
+        )
+        project_id = created.json()["id"]
+        folder = projects / project_id
+        plan = client.get(f"/api/projects/{project_id}/plan", headers=_headers(token)).json()
+        for revision in range(21):
+            plan["project"]["name"] = f"Save {revision}"
+            response = client.put(
+                f"/api/projects/{project_id}/plan",
+                json=plan,
+                headers={**_headers(token), "If-Match": str(revision)},
+            )
+            assert response.status_code == 200
+            plan = response.json()
+        previous = json.loads((folder / "plan.prev.json").read_text(encoding="utf-8"))
+        assert previous["revision"] == 20
+        current = json.loads((folder / "plan.json").read_text(encoding="utf-8"))
+        assert current["revision"] == 21
+        archived = sorted(int(path.stem) for path in (folder / "revisions").glob("*.json"))
+        assert archived == list(range(1, 21))
+
+
+def test_recent_list_drops_a_missing_folder(tmp_path: Path, token: str) -> None:
+    client, projects, config = _client(tmp_path, token)
+    ids: list[str] = []
+    with client:
+        for name in ("One", "Two", "Three"):
+            source = tmp_path / f"{name}.glb"
+            source.write_bytes(b"glb")
+            created = client.post(
+                "/api/projects",
+                json={"linkPath": str(source), "name": name},
+                headers=_headers(token),
+            )
+            assert created.status_code == 200
+            ids.append(created.json()["id"])
+        listed = client.get("/api/projects", headers=_headers(token))
+        assert listed.status_code == 200
+        assert [item["id"] for item in listed.json()] == [ids[2], ids[1], ids[0]]
+
+        import shutil
+
+        shutil.rmtree(projects / ids[1])
+        remaining = client.get("/api/projects", headers=_headers(token))
+        assert [item["id"] for item in remaining.json()] == [ids[2], ids[0]]
+        saved = (config / "recent.json").read_text(encoding="utf-8")
+        assert ids[1] not in saved
+
+
+def test_small_upload_is_copied_into_the_project(tmp_path: Path, token: str) -> None:
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            files={"file": ("room.glb", b"glb-bytes", "model/gltf-binary")},
+            data={"name": "Uploaded"},
+            headers=_headers(token),
+        )
+        assert created.status_code == 200
+        body = created.json()
+        assert body["linkedPath"] is None
+        assert body["sourceFileName"] == "room.glb"
+        folder = projects / body["id"]
+        assert (folder / "source.glb").read_bytes() == b"glb-bytes"
+        assert folder.is_relative_to(projects)
+
+
+def test_upload_over_200_mb_is_rejected_without_a_copy(
+    tmp_path: Path, token: str, monkeypatch
+) -> None:
+    monkeypatch.setattr("hero.projects.MAX_COPY_BYTES", 4)
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            files={"file": ("big.laz", b"12345", "application/octet-stream")},
+            headers=_headers(token),
+        )
+        assert created.status_code == 400
+        assert "Link" in created.json()["detail"]
+        assert list(projects.glob("*")) == []
+
+
+def test_copy_limit_is_200_megabytes() -> None:
+    from hero.projects import MAX_COPY_BYTES
+
+    assert MAX_COPY_BYTES == 200 * 1024 * 1024
+
+
+def test_missing_link_is_400(tmp_path: Path, token: str) -> None:
+    missing = tmp_path / "gone.glb"
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(missing)},
+            headers=_headers(token),
+        )
+        assert created.status_code == 400
+        assert created.json()["detail"] == f"The linked file is missing: {missing}"
+        assert list(projects.glob("*")) == []
+
+
+def test_open_file_dialog_returns_the_stubbed_path(tmp_path: Path, token: str) -> None:
+    chosen = tmp_path / "scan.e57"
+    chosen.write_bytes(b"e57")
+    client, _projects, _config = _client(tmp_path, token, open_file=lambda: str(chosen))
+    with client:
+        opened = client.post("/api/dialogs/open-file", headers=_headers(token))
+        assert opened.status_code == 200
+        assert opened.json() == {"path": str(chosen)}
+
+
+def test_cancelled_dialog_is_400(tmp_path: Path, token: str) -> None:
+    client, _projects, _config = _client(tmp_path, token, open_file=lambda: None)
+    with client:
+        opened = client.post("/api/dialogs/open-file", headers=_headers(token))
+        assert opened.status_code == 400
+        assert opened.json()["detail"]

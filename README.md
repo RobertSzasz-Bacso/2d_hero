@@ -2,9 +2,9 @@
 
 A local Windows app that turns a 3D scan or an IFC model into an editable metric floor plan and a scaled PDF.
 
-Phase 1 is an empty shell: a local API, the session-token check, and a page with a button and a health line. Later phases add the plan, the editor, and the PDF.
+The app is a local API plus a settings page. Projects are folders under `Documents\2D Hero`. Settings, except the Cursor key, live in `%APPDATA%\2D Hero`. The Cursor key is stored with Windows Credential Manager and is never written into a project or a response. Later phases add the editor and the PDF.
 
-## Start the empty app
+## Start the app
 
 Install [uv](https://docs.astral.sh/uv/) and Node.js, then:
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button.tsx";
+import Settings from "./settings.tsx";
 import { heroFetch } from "./session.ts";
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
     <main className="flex min-h-svh flex-col items-start gap-4 p-8">
       <Button type="button">2D Hero</Button>
       <p>Health: {health}</p>
+      <Settings />
     </main>
   );
 }

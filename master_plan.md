@@ -18,7 +18,7 @@ Status values: `not started`, `in progress`, `done`.
 ## Status
 
 - [x] Phase 1 — Foundation reset — `done`
-- [ ] Phase 2 — Persistence and secure settings — `not started`
+- [x] Phase 2 — Persistence and secure settings — `done`
 - [ ] Phase 3 — Editor core — `not started`
 - [ ] Phase 4 — Editor canvas — `not started`
 - [ ] Phase 5 — Editor drawing tools — `not started`
@@ -115,7 +115,7 @@ Then do the closing steps in master_plan.md (check.ps1, docs/handoff/phase-01.md
 
 ## Phase 2 — Persistence and secure settings
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 1 done.
 

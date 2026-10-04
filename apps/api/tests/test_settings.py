@@ -8,10 +8,14 @@ def test_settings_placeholder_has_no_key(client, token: str) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body == {"cursorKeySet": False}
+    assert body["cursorKeySet"] is False
+    assert body["dimensionUnit"] == "cm"
+    assert body["gridSpacingM"] == 1
+    assert body["titleBlock"]["company"] == ""
+    assert "key" not in body
     assert token not in response.text
     assert KEY_SHAPED.search(response.text) is None
-    assert _string_values(body) == []
+    assert all(KEY_SHAPED.search(value) is None for value in _string_values(body))
 
 
 def _string_values(value: object) -> list[str]:

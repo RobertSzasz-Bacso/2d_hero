@@ -11,7 +11,8 @@ import uvicorn
 from fastapi import FastAPI
 
 from hero.app import create_app
-from hero.paths import app_config_dir, default_session_file, web_dist
+from hero.dialogs import ask_open_file
+from hero.paths import app_config_dir, default_projects_dir, default_session_file, web_dist
 from hero.session_file import write_token
 
 logger = logging.getLogger("hero")
@@ -39,8 +40,10 @@ def main(argv: list[str] | None = None) -> None:
     app = create_app(
         token=token,
         config_dir=config_dir,
+        projects_dir=default_projects_dir(),
         session_file=session_file,
         dist_dir=web_dist(),
+        open_file=ask_open_file,
     )
     port = _choose_port(args.port)
     if not web_dist().is_dir():
