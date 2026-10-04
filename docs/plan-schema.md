@@ -68,7 +68,7 @@ Issue:
 | `levelId` | string or null |
 | `elementId` | string or null |
 
-Codes: `gravity_uncertain`, `units_guessed`, `non_manhattan`, `assumed_thickness`, `open_gap`, `uncertain_room`, `room_seed_lost`, `room_not_split`, `low_confidence_opening`, `ifc_wall_from_solid`, `missing_source`.
+Codes: `gravity_uncertain`, `units_guessed`, `non_manhattan`, `assumed_thickness`, `open_gap`, `uncertain_room`, `room_seed_lost`, `room_not_split`, `low_confidence_opening`, `ifc_wall_from_solid`, `missing_source`, `ceiling_missing`.
 
 Do not invent a code without adding it to this list in the same phase.
 

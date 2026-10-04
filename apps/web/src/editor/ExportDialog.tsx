@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button.tsx"
+import { Spinner } from "@/components/Busy.tsx"
 import { compilePlan, type Scale } from "@/drawing/compile.ts"
 import { describePdfError, savePdf } from "@/pdf/save.ts"
 import { writePdf } from "@/pdf/write.ts"
@@ -118,6 +119,7 @@ export default function ExportDialog() {
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="button" data-testid="export-download" disabled={busy || (!compiled.fits && !tile)} onClick={() => void download()}>
+                {busy ? <Spinner /> : null}
                 {busy ? "Writing" : "Download"}
               </Button>
             </div>

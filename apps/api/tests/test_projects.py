@@ -2,10 +2,13 @@
 
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -235,6 +238,111 @@ def test_open_file_dialog_returns_the_stubbed_path(tmp_path: Path, token: str) -
         opened = client.post("/api/dialogs/open-file", headers=_headers(token))
         assert opened.status_code == 200
         assert opened.json() == {"path": str(chosen)}
+
+
+def test_delete_removes_the_folder_and_keeps_the_linked_file(tmp_path: Path, token: str) -> None:
+    source = tmp_path / "scan.glb"
+    source.write_bytes(b"glb")
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "House"},
+            headers=_headers(token),
+        )
+        project_id = created.json()["id"]
+        deleted = client.delete(f"/api/projects/{project_id}", headers=_headers(token))
+        assert deleted.status_code == 200
+        assert deleted.json() == {"deleted": True}
+        assert not (projects / project_id).exists()
+        assert source.is_file()
+        listed = client.get("/api/projects", headers=_headers(token))
+        assert listed.json() == []
+
+
+def test_delete_unknown_project_is_404(tmp_path: Path, token: str) -> None:
+    client, _projects, _config = _client(tmp_path, token)
+    with client:
+        deleted = client.delete("/api/projects/" + "ab" * 16, headers=_headers(token))
+        assert deleted.status_code == 404
+        assert deleted.json()["detail"] == "Project was not found."
+
+
+def test_delete_is_refused_while_an_import_is_running(tmp_path: Path, token: str) -> None:
+    source = ROOT / "fixtures" / "synthetic" / "building.obj"
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "Held"},
+            headers=_headers(token),
+        )
+        project_id = created.json()["id"]
+        folder = projects / project_id
+        (folder / "job.hold").write_text("1", encoding="utf-8")
+        (folder / "job.cancel").write_text("1", encoding="utf-8")
+        started = client.post(
+            f"/api/projects/{project_id}/jobs",
+            json={"kind": "import", "units": "auto", "upAxis": "auto"},
+            headers=_headers(token),
+        )
+        assert started.status_code == 200
+        assert not (folder / "job.cancel").exists()
+        refused = client.delete(f"/api/projects/{project_id}", headers=_headers(token))
+        assert refused.status_code == 409
+        assert refused.json()["detail"] == "An import is running for this project."
+        assert folder.is_dir()
+        (folder / "job.cancel").write_text("1", encoding="utf-8")
+        (folder / "job.hold").unlink(missing_ok=True)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            job_path = folder / "job.json"
+            text = job_path.read_text(encoding="utf-8") if job_path.is_file() else ""
+            if any(state in text for state in ('"cancelled"', '"done"', '"error"')):
+                break
+            time.sleep(0.05)
+
+
+def test_project_reports_import_state(tmp_path: Path, token: str) -> None:
+    source = tmp_path / "scan.glb"
+    source.write_bytes(b"glb")
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "House"},
+            headers=_headers(token),
+        )
+        project_id = created.json()["id"]
+        assert created.json()["importState"] == "none"
+        folder = projects / project_id
+        (folder / "job.json").write_text(
+            json.dumps({"state": "done", "stage": "preview", "progress": 100, "error": ""}),
+            encoding="utf-8",
+        )
+        done = client.get(f"/api/projects/{project_id}", headers=_headers(token))
+        assert done.json()["importState"] == "done"
+        (folder / "job.json").write_text(
+            json.dumps(
+                {
+                    "state": "error",
+                    "stage": "ingest",
+                    "progress": 0,
+                    "error": "The import failed. The plan was not changed.",
+                }
+            ),
+            encoding="utf-8",
+        )
+        failed = client.get("/api/projects", headers=_headers(token))
+        assert failed.json()[0]["importState"] == "error"
+        assert failed.json()[0]["importError"]
+        (folder / "job.json").write_text(
+            json.dumps({"state": "running", "stage": "ingest", "progress": 10, "error": ""}),
+            encoding="utf-8",
+        )
+        interrupted = client.get(f"/api/projects/{project_id}", headers=_headers(token))
+        assert interrupted.json()["importState"] == "error"
+        assert interrupted.json()["importError"] == "The import was interrupted."
 
 
 def test_cancelled_dialog_is_400(tmp_path: Path, token: str) -> None:

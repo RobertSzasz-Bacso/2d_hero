@@ -368,7 +368,10 @@ def _openings(products, hosts, segments, elevation: float, ceiling: float, scale
         opening = _void_opening(product, hosts, segments, elevation, ceiling, scale, "passage")
         if opening is not None:
             openings.append(opening)
-    return openings
+    return [
+        opening.model_copy(update={"id": f"o{index}"})
+        for index, opening in enumerate(openings, start=1)
+    ]
 
 
 def _filled_opening(product, hosts, segments, elevation, ceiling, scale):
@@ -398,7 +401,6 @@ def _filled_opening(product, hosts, segments, elevation, ceiling, scale):
         height,
         elevation,
         ceiling,
-        len(hosts),
     )
 
 
@@ -413,7 +415,7 @@ def _void_opening(product, hosts, segments, elevation, ceiling, scale, kind: str
     height = max(ceiling * 0.9, 0.2)
     width = 1.0
     return _make_opening(
-        wall_id, segments[wall_id], kind, x, y, z, width, height, elevation, ceiling, len(hosts)
+        wall_id, segments[wall_id], kind, x, y, z, width, height, elevation, ceiling
     )
 
 
@@ -424,7 +426,7 @@ def _void_host(feature):
     return voids[0].RelatingBuildingElement
 
 
-def _make_opening(wall_id, segment, kind, x, y, z, width, height, elevation, ceiling, salt: int):
+def _make_opening(wall_id, segment, kind, x, y, z, width, height, elevation, ceiling):
     ax, ay, bx, by = segment
     length = math.hypot(bx - ax, by - ay)
     if length <= width:
@@ -446,7 +448,7 @@ def _make_opening(wall_id, segment, kind, x, y, z, width, height, elevation, cei
     if kind == "passage":
         swing = "none"
     return Opening(
-        id=f"o{wall_id[1:]}{salt}",
+        id="o0",
         wall=wall_id,
         kind=kind,
         offset=offset,

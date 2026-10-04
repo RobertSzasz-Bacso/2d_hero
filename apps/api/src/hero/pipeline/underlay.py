@@ -21,8 +21,6 @@ def write_underlays(folder, result: Normalized) -> list[dict[str, float | str]]:
     root = Path(folder) / "underlay"
     root.mkdir(parents=True, exist_ok=True)
     levels = list(result.levels)
-    if not levels and len(result.points):
-        levels = [LevelSlice(elevation=float(np.min(result.points[:, 2])), ceiling_height=2.7)]
     frames: list[dict[str, float | str]] = []
     for index, level in enumerate(levels):
         level_id = f"L{index + 1}"

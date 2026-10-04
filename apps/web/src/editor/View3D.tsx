@@ -3,14 +3,18 @@ import { Canvas, useThree } from "@react-three/fiber"
 import { useEffect, useState } from "react"
 import * as THREE from "three"
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
+import { Spinner } from "@/components/Busy.tsx"
 import { heroFetch } from "@/session.ts"
 
 export default function View3D({ projectId, elevation }: { projectId: string; elevation: number }) {
   const [scene, setScene] = useState<THREE.Group | null>(null)
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
 
   useEffect(() => {
     let active = true
     let objectUrl: string | null = null
+    setStatus("loading")
+    setScene(null)
     heroFetch(`/api/projects/${projectId}/preview`)
       .then(async (response) => {
         if (!response.ok) {
@@ -24,11 +28,21 @@ export default function View3D({ projectId, elevation }: { projectId: string; el
         return new GLTFLoader().loadAsync(objectUrl)
       })
       .then((gltf) => {
-        if (active && gltf) {
-          setScene(gltf.scene)
+        if (!active) {
+          return
+        }
+        if (!gltf) {
+          setStatus("error")
+          return
+        }
+        setScene(gltf.scene)
+        setStatus("ready")
+      })
+      .catch(() => {
+        if (active) {
+          setStatus("error")
         }
       })
-      .catch(() => undefined)
     return () => {
       active = false
       if (objectUrl) {
@@ -38,7 +52,15 @@ export default function View3D({ projectId, elevation }: { projectId: string; el
   }, [projectId])
 
   return (
-    <div data-testid="view-3d" className="h-72 w-80 shrink-0 border-l border-slate-200 bg-slate-900">
+    <div data-testid="view-3d" className="relative h-72 w-80 shrink-0 border-l border-slate-200 bg-slate-900">
+      {status === "loading" ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center text-slate-200">
+          <Spinner className="size-6" />
+        </div>
+      ) : null}
+      {status === "error" ? (
+        <p className="absolute inset-x-3 bottom-3 z-10 text-center text-xs text-slate-300">The 3D preview could not be loaded.</p>
+      ) : null}
       <Canvas camera={{ position: [8, -8, 6], fov: 45, up: [0, 0, 1] }}>
         <color attach="background" args={["#0f172a"]} />
         <ambientLight intensity={0.7} />

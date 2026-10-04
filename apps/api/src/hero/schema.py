@@ -21,6 +21,7 @@ IssueCode = Literal[
     "low_confidence_opening",
     "ifc_wall_from_solid",
     "missing_source",
+    "ceiling_missing",
 ]
 
 SymbolId = Literal[

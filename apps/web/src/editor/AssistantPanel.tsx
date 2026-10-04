@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Spinner } from "@/components/Busy.tsx"
 import { applyAiOps, type AiOp } from "@/core/ai.ts"
 import type { Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
@@ -140,6 +141,7 @@ export default function AssistantPanel({ projectId }: { projectId: string }) {
             onChange={(event) => setInstruction(event.target.value)}
           />
           <Button type="submit" data-testid="ai-ask" disabled={busy || instruction.trim().length === 0}>
+            {busy ? <Spinner /> : null}
             Ask
           </Button>
         </form>
@@ -159,6 +161,7 @@ export default function AssistantPanel({ projectId }: { projectId: string }) {
           </ul>
           <div className="flex gap-2">
             <Button type="button" data-testid="ai-accept" disabled={busy} onClick={() => void accept()}>
+              {busy ? <Spinner /> : null}
               Accept
             </Button>
             <Button type="button" variant="outline" data-testid="ai-reject" disabled={busy} onClick={() => void reject()}>

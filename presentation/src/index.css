@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1000px 520px at 0% -10%, rgba(34, 211, 238, 0.09), transparent 55%),
+    radial-gradient(800px 480px at 100% 0%, rgba(167, 139, 250, 0.08), transparent 50%),
+    #070b14;
+  color: #e7eef8;
+  font-family: var(--font-sans);
+}
+
+.blueprint {
+  background-image:
+    linear-gradient(rgba(148, 176, 210, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 176, 210, 0.055) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.kbd {
+  display: inline-flex;
+  min-width: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(148, 176, 210, 0.28);
+  background: rgba(8, 12, 22, 0.65);
+  padding: 0.05rem 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: #c5d2e4;
+}
+
+.payload-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

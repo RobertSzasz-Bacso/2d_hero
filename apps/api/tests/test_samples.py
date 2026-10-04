@@ -70,6 +70,20 @@ def test_reference_length_matches_a_known_wall(tmp_path: Path) -> None:
     check_samples(folder)
 
 
+def test_ruined_building_imports_a_storey_with_walls() -> None:
+    from hero.ingest.read import read_source
+    from hero.pipeline.normalize import normalize_scene
+    from hero.pipeline.planwrite import detect_plan
+
+    path = ROOT / "samples" / "user" / "two_social_rooms_in_a_ruined_building.glb"
+    if not path.is_file():
+        pytest.skip(f"Missing sample: {path}")
+    result = normalize_scene(read_source(path), units="auto", up_axis="auto")
+    _drafts, surfaces = detect_plan(result)
+    assert result.levels
+    assert surfaces.faces
+
+
 def test_user_samples_skip_or_pass() -> None:
     folder = ROOT / "samples" / "user"
     manifest = folder / "manifest.json"

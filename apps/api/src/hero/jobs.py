@@ -119,6 +119,8 @@ def start_import(folder: Path, units: str, up_axis: str) -> str:
     job_id = uuid.uuid4().hex
     _folders[job_id] = folder
     try:
+        (folder / "job.cancel").unlink(missing_ok=True)
+        (folder / "job.json").unlink(missing_ok=True)
         future = _pool().submit(execute_import, str(folder), units, up_axis)
     except Exception:
         _lock.release()
@@ -126,6 +128,31 @@ def start_import(folder: Path, units: str, up_axis: str) -> str:
     _futures[job_id] = future
     future.add_done_callback(_release)
     return job_id
+
+
+def import_status(folder: Path) -> dict[str, object]:
+    """Import state for a project folder, including a job this process is still running."""
+    live = _live_job(folder)
+    loaded = _read_job_file(folder)
+    state = loaded.get("state")
+    error = loaded.get("error") if isinstance(loaded.get("error"), str) else ""
+    progress = loaded.get("progress") if isinstance(loaded.get("progress"), int) else 0
+    if state == "running" and live is None:
+        return {
+            "importState": "error",
+            "importError": "The import was interrupted.",
+            "jobId": None,
+            "importProgress": progress,
+        }
+    if state not in {"running", "done", "error", "cancelled"}:
+        state = "running" if live is not None else "none"
+        error = ""
+    return {
+        "importState": state,
+        "importError": error,
+        "jobId": live if state == "running" else None,
+        "importProgress": progress,
+    }
 
 
 def job_snapshot(job_id: str) -> dict[str, object] | None:
@@ -162,6 +189,30 @@ def shutdown_pool() -> None:
         return
     _executor.shutdown(wait=False, cancel_futures=True)
     _executor = None
+
+
+def _live_job(folder: Path) -> str | None:
+    target = folder.resolve()
+    for job_id, known in _folders.items():
+        future = _futures.get(job_id)
+        if future is None or future.done():
+            continue
+        if known.resolve() == target:
+            return job_id
+    return None
+
+
+def _read_job_file(folder: Path) -> dict[str, object]:
+    path = folder / "job.json"
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if isinstance(loaded, dict):
+        return loaded
+    return {}
 
 
 def _pool() -> ProcessPoolExecutor:

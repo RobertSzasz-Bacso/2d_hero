@@ -1,74 +1,187 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button.tsx"
+import { BusyOverlay } from "@/components/Busy.tsx"
 import { heroFetch } from "@/session.ts"
 
 type Guess = { units: string; upAxis: string }
 
-export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) => void }) {
-  const [projectId, setProjectId] = useState<string | null>(null)
+export default function ImportPanel({
+  onOpen,
+  projectId: resumeId = null,
+}: {
+  onOpen: (projectId: string) => void
+  projectId?: string | null
+}) {
+  const [projectId, setProjectId] = useState<string | null>(resumeId)
   const [guess, setGuess] = useState<Guess | null>(null)
   const [units, setUnits] = useState("auto")
   const [upAxis, setUpAxis] = useState("auto")
   const [progress, setProgress] = useState("")
+  const [percent, setPercent] = useState(0)
   const [jobId, setJobId] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const [busy, setBusy] = useState("")
+  const [elapsed, setElapsed] = useState(0)
+  const alive = useRef(true)
 
-  async function upload(file: File) {
-    setError("")
-    setGuess(null)
-    const body = new FormData()
-    body.set("file", file)
-    body.set("name", file.name.replace(/\.[^.]+$/, ""))
-    const created = await heroFetch("/api/projects", { method: "POST", body })
-    if (!created.ok) {
-      setError(await readDetail(created))
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!jobId) {
       return
     }
-    const project = (await created.json()) as { id: string }
-    setProjectId(project.id)
-    const guessed = await heroFetch(`/api/projects/${project.id}/guess`)
+    const startedAt = Date.now()
+    setElapsed(0)
+    const timer = window.setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [jobId])
+
+  useEffect(() => {
+    if (!resumeId) {
+      return
+    }
+    let active = true
+    setProjectId(resumeId)
+    setBusy("Reading the file...")
+    heroFetch(`/api/projects/${resumeId}`)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(await readDetail(response))
+        }
+        return (await response.json()) as { importState?: string; jobId?: string | null; importError?: string }
+      })
+      .then(async (project) => {
+        if (!active) {
+          return
+        }
+        if (project.importState === "running" && project.jobId) {
+          setBusy("")
+          await follow(resumeId, project.jobId)
+          return
+        }
+        if (project.importError) {
+          setError(project.importError)
+        }
+        await loadGuess(resumeId)
+      })
+      .catch((reason: unknown) => {
+        if (!active) {
+          return
+        }
+        setBusy("")
+        setError(reason instanceof Error ? reason.message : "Could not open the project.")
+      })
+    return () => {
+      active = false
+    }
+  }, [resumeId])
+
+  async function loadGuess(id: string) {
+    setBusy("Reading the file...")
+    const guessed = await heroFetch(`/api/projects/${id}/guess`)
+    if (!alive.current) {
+      return
+    }
+    setBusy("")
     if (!guessed.ok) {
       setError(await readDetail(guessed))
       return
     }
-    const next = (await guessed.json()) as Guess
+    applyGuess((await guessed.json()) as Guess)
+  }
+
+  function applyGuess(next: Guess) {
     setGuess(next)
     setUnits(next.units === "m" || next.units === "mm" ? next.units : "auto")
     setUpAxis(next.upAxis === "x" || next.upAxis === "y" || next.upAxis === "z" ? next.upAxis : "auto")
   }
 
-  async function browse() {
+  async function follow(id: string, nextJobId: string) {
+    setJobId(nextJobId)
     setError("")
-    const selected = await heroFetch("/api/dialogs/open-file", { method: "POST" })
-    if (!selected.ok) {
-      setError(await readDetail(selected))
-      return
-    }
-    const body = (await selected.json()) as { path?: string }
-    if (!body.path) {
-      setError("No file was selected.")
-      return
-    }
-    const created = await heroFetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linkPath: body.path }),
+    const done = await watch(nextJobId, (text, value) => {
+      if (!alive.current) {
+        return
+      }
+      setProgress(text)
+      setPercent(value)
     })
+    if (!alive.current) {
+      return
+    }
+    setJobId(null)
+    if (done === "done") {
+      onOpen(id)
+      return
+    }
+    setProgress("")
+    setError(done)
+    await loadGuess(id)
+  }
+
+  async function upload(file: File) {
+    setError("")
+    setGuess(null)
+    setBusy("Copying file...")
+    const body = new FormData()
+    body.set("file", file)
+    body.set("name", file.name.replace(/\.[^.]+$/, ""))
+    const created = await heroFetch("/api/projects", { method: "POST", body })
+    if (!alive.current) {
+      return
+    }
     if (!created.ok) {
+      setBusy("")
       setError(await readDetail(created))
       return
     }
     const project = (await created.json()) as { id: string }
     setProjectId(project.id)
-    const guessed = await heroFetch(`/api/projects/${project.id}/guess`)
-    if (!guessed.ok) {
-      setError(await readDetail(guessed))
+    await loadGuess(project.id)
+  }
+
+  async function browse() {
+    setError("")
+    setBusy("Waiting for the Windows file dialog (it may be behind this window)")
+    const selected = await heroFetch("/api/dialogs/open-file", { method: "POST" })
+    if (!alive.current) {
       return
     }
-    const next = (await guessed.json()) as Guess
-    setGuess(next)
-    setUnits(next.units === "m" || next.units === "mm" ? next.units : "auto")
-    setUpAxis(next.upAxis === "x" || next.upAxis === "y" || next.upAxis === "z" ? next.upAxis : "auto")
+    if (!selected.ok) {
+      setBusy("")
+      setError(await readDetail(selected))
+      return
+    }
+    const body = (await selected.json()) as { path?: string }
+    if (!body.path) {
+      setBusy("")
+      setError("No file was selected.")
+      return
+    }
+    setBusy("Reading the file...")
+    const created = await heroFetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linkPath: body.path }),
+    })
+    if (!alive.current) {
+      return
+    }
+    if (!created.ok) {
+      setBusy("")
+      setError(await readDetail(created))
+      return
+    }
+    const project = (await created.json()) as { id: string }
+    setProjectId(project.id)
+    await loadGuess(project.id)
   }
 
   async function start() {
@@ -81,20 +194,15 @@ export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind: "import", units, upAxis }),
     })
+    if (!alive.current) {
+      return
+    }
     if (!response.ok) {
       setError(await readDetail(response))
       return
     }
     const job = (await response.json()) as { id: string }
-    setJobId(job.id)
-    const done = await watch(job.id, setProgress)
-    setJobId(null)
-    if (done === "done") {
-      onOpen(projectId)
-      return
-    }
-    setProgress("")
-    setError(done)
+    await follow(projectId, job.id)
   }
 
   async function cancel() {
@@ -104,8 +212,12 @@ export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) =>
     await heroFetch(`/api/jobs/${jobId}/cancel`, { method: "POST" })
   }
 
+  const overlay = jobId
+    ? progress || "Starting import..."
+    : busy
+
   return (
-    <section className="flex w-full max-w-lg flex-col gap-3 rounded border border-slate-200 p-4">
+    <section className="relative flex w-full max-w-lg flex-col gap-3 rounded border border-slate-200 p-4">
       <h2 className="text-sm font-medium">Import a scan</h2>
       <label className="flex cursor-pointer flex-col gap-2 rounded border border-dashed border-slate-300 p-4 text-sm">
         Drop a file or choose one
@@ -121,7 +233,7 @@ export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) =>
           }}
         />
       </label>
-      <Button type="button" variant="outline" onClick={() => void browse()}>
+      <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy.length > 0 || jobId !== null}>
         Browse
       </Button>
       {guess ? (
@@ -150,33 +262,38 @@ export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) =>
           </Button>
         </div>
       ) : null}
-      {progress ? (
+      {progress && !jobId ? (
         <p data-testid="import-progress" className="text-sm">
           {progress}
         </p>
-      ) : null}
-      {jobId ? (
-        <Button type="button" variant="outline" data-testid="import-cancel" onClick={() => void cancel()}>
-          Cancel
-        </Button>
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-700" data-testid="import-error">
           {error}
         </p>
       ) : null}
+      {overlay ? (
+        <BusyOverlay
+          testId="import-overlay"
+          message={jobId ? progress || "Starting import..." : busy}
+          elapsed={jobId ? elapsed : undefined}
+          progress={jobId ? percent : undefined}
+          onCancel={jobId ? () => void cancel() : undefined}
+        />
+      ) : null}
     </section>
   )
 }
 
-async function watch(jobId: string, setProgress: (text: string) => void): Promise<string> {
-  for (let attempt = 0; attempt < 300; attempt += 1) {
+async function watch(jobId: string, setProgress: (text: string, percent: number) => void): Promise<string> {
+  for (;;) {
     const response = await heroFetch(`/api/jobs/${jobId}`)
     if (!response.ok) {
       return "The import job was not found."
     }
     const body = (await response.json()) as { state?: string; stage?: string; progress?: number; error?: string }
-    setProgress(`${body.stage ?? "import"} ${body.progress ?? 0}%`)
+    const value = body.progress ?? 0
+    setProgress(`${body.stage ?? "import"} ${value}%`, value)
     if (body.state === "done") {
       return "done"
     }
@@ -188,7 +305,6 @@ async function watch(jobId: string, setProgress: (text: string) => void): Promis
     }
     await new Promise((resolve) => setTimeout(resolve, 400))
   }
-  return "The import took too long."
 }
 
 async function readDetail(response: Response): Promise<string> {

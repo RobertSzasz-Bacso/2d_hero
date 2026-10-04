@@ -12,8 +12,8 @@
       "file": "Duplex_A_20110907.ifc",
       "source": "public",
       "kind": "ifc",
-      "notes": "buildingSMART duplex apartment. Attribution required. See samples/README.md.",
-      "levels": 2,
+      "notes": "buildingSMART duplex apartment. Attribution required. See samples/README.md. Four storeys: two floors, foundation, and roof.",
+      "levels": 4,
       "references": []
     }
   ]

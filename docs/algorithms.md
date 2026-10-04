@@ -109,11 +109,12 @@ After Z-up:
 
 1. Keep points whose normal is within 15° of +Z (floor) or −Z (ceiling).
 2. Histogram Z with bin 0.05 m. Smooth with a 3-bin mean.
-3. Peaks are bins higher than both neighbors and higher than 2% of the points in the histogram.
+3. A peak is a smoothed bin at least as high as both neighbors, and higher than 2% of the points in the histogram. A flat smoothed plateau keeps the bin with the higher raw count. The reported height is the count-weighted centre of that bin and its two neighbors. Edge bins count.
 4. Pair each floor peak with the next ceiling peak 1.8–8.0 m above it.
 5. A floor peak whose horizontal coverage is under 30% of the largest floor is not its own level. Add an info issue and ignore it as a mezzanine hint.
 6. Each pair is a level: `elevation` is the floor Z, `ceilingHeight` is the difference.
-7. Points within 0.3 m below the floor or 0.3 m above the ceiling belong to that level for later stages.
+7. If the cloud has points but no floor/ceiling pair, keep one level at the strongest floor peak, or at the lowest point when there is no floor peak. `ceilingHeight` is 2.7 m. Add warning `ceiling_missing`.
+8. Points within 0.3 m below the floor or 0.3 m above the ceiling belong to that level for later stages.
 
 Acceptance: two synthetic storeys, elevations within 0.05 m.
 

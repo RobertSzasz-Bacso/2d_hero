@@ -433,6 +433,19 @@ def _storeys(
         levels.append(
             LevelSlice(elevation=float(floor_z), ceiling_height=float(ceiling_z - floor_z))
         )
+    if not levels and len(points):
+        if kept:
+            floor_z = max(kept, key=lambda peak: peak[1])[0]
+        else:
+            floor_z = float(np.min(points[:, 2]))
+        levels.append(LevelSlice(elevation=float(floor_z), ceiling_height=2.7))
+        hints.append(
+            {
+                "code": "ceiling_missing",
+                "severity": "warning",
+                "message": "No ceiling was found, so the storey height is assumed.",
+            }
+        )
     return levels, hints
 
 
@@ -445,27 +458,57 @@ def _band_area(points: np.ndarray, height: float) -> float:
     return float(len(np.unique(packed))) * 0.05 * 0.05
 
 
+def _short_peaks(hist: np.ndarray, edges: np.ndarray) -> list[tuple[float, int]]:
+    """Peaks when the histogram is shorter than the 3-bin smoother."""
+    total = int(hist.sum())
+    found: list[tuple[float, int]] = []
+    for index in range(len(hist)):
+        if total <= 0 or hist[index] < 0.02 * total:
+            continue
+        if index > 0 and hist[index] < hist[index - 1]:
+            continue
+        if index + 1 < len(hist) and hist[index] < hist[index + 1]:
+            continue
+        center = float((edges[index] + edges[index + 1]) / 2.0)
+        found.append((center, int(hist[index])))
+    return found
+
+
 def _peaks(values: np.ndarray) -> list[tuple[float, int]]:
+    """Smoothed peaks. Height is the weighted centre of the peak and its neighbours."""
     if len(values) == 0:
         return []
     low = float(values.min()) - 0.05
     high = float(values.max()) + 0.1
     hist, edges = np.histogram(values, bins=np.arange(low, high, 0.05))
-    if len(hist) < 3:
+    if len(hist) == 0:
         return []
+    if len(hist) < 3:
+        return _short_peaks(hist, edges)
     kernel = np.ones(3) / 3.0
     smooth = np.convolve(hist, kernel, mode="same")
     found: list[tuple[float, int]] = []
     total = int(hist.sum())
-    for index in range(1, len(smooth) - 1):
-        if smooth[index] < smooth[index - 1] or smooth[index] < smooth[index + 1]:
+    last = len(smooth) - 1
+    for index in range(len(smooth)):
+        left = smooth[index - 1] if index > 0 else -1.0
+        right = smooth[index + 1] if index < last else -1.0
+        if smooth[index] < left or smooth[index] < right:
             continue
-        if hist[index] <= hist[index - 1] or hist[index] <= hist[index + 1]:
+        # A 3-bin mean turns one full bin into a two-bin plateau. Keep the fuller bin.
+        if index > 0 and smooth[index] == left and hist[index] <= hist[index - 1]:
             continue
         if hist[index] < 0.02 * total:
             continue
-        center = float((edges[index] + edges[index + 1]) / 2.0)
-        found.append((center, int(hist[index])))
+        start = max(index - 1, 0)
+        stop = min(index + 1, len(hist) - 1)
+        bins = np.arange(start, stop + 1)
+        weights = hist[bins].astype(np.float64)
+        centers = (edges[bins] + edges[bins + 1]) / 2.0
+        weight = float(weights.sum())
+        if weight <= 0:
+            continue
+        found.append((float(np.dot(weights, centers) / weight), int(hist[index])))
     return found
 
 

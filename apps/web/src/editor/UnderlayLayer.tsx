@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Spinner } from "@/components/Busy.tsx"
 import type { Bounds } from "@/view/camera.ts"
 import { heroFetch } from "@/session.ts"
 import { useEditor } from "./store.ts"
@@ -11,10 +12,12 @@ export default function UnderlayLayer({ projectId, levelId }: { projectId: strin
   const opacity = useEditor((state) => state.underlayOpacity)
   const [frame, setFrame] = useState<Frame | null>(null)
   const [url, setUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     let active = true
     let objectUrl: string | null = null
+    setLoading(true)
     heroFetch(`/api/projects/${projectId}/underlay/frames.json`)
       .then(async (response) => {
         if (!response.ok) {
@@ -44,6 +47,11 @@ export default function UnderlayLayer({ projectId, levelId }: { projectId: strin
         }
       })
       .catch(() => undefined)
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
     return () => {
       active = false
       if (objectUrl) {
@@ -52,6 +60,13 @@ export default function UnderlayLayer({ projectId, levelId }: { projectId: strin
     }
   }, [projectId, levelId])
 
+  if (visible && loading && !url) {
+    return (
+      <span className="absolute left-3 top-3 z-10" data-testid="underlay-loading">
+        <Spinner />
+      </span>
+    )
+  }
   if (!visible || !frame || !url) {
     return null
   }

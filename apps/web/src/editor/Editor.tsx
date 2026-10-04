@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import { Button } from "@/components/ui/button.tsx"
+import { BusyOverlay } from "@/components/Busy.tsx"
 import type { Level, Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
 import AssistantPanel from "./AssistantPanel.tsx"
@@ -14,13 +15,22 @@ import { useEditor } from "./store.ts"
 
 const noLevels: Level[] = []
 
-export default function Editor({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+export default function Editor({
+  projectId,
+  onClose,
+  onImport,
+}: {
+  projectId: string
+  onClose: () => void
+  onImport: () => void
+}) {
   const ready = useEditor((state) => state.ready && state.projectId === projectId)
   const loadError = useEditor((state) => state.loadError)
   const saveStatus = useEditor((state) => state.saveStatus)
   const saveError = useEditor((state) => state.saveError)
   const planName = useEditor((state) => state.history?.plan.project.name ?? "")
   const levels = useEditor((state) => state.history?.plan.levels ?? noLevels)
+  const imported = useEditor((state) => state.history?.plan.detection.source != null)
   const activeLevelId = useEditor((state) => state.activeLevelId)
   const underlayVisible = useEditor((state) => state.underlayVisible)
   const underlayOpacity = useEditor((state) => state.underlayOpacity)
@@ -201,6 +211,15 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
       ) : null}
       {loadError ? <p className="px-3 py-2 text-sm text-red-800">{loadError}</p> : null}
       <div className="relative flex min-h-0 flex-1">
+        {!ready && !loadError ? <BusyOverlay message="Loading plan..." /> : null}
+        {ready && imported && levels.length === 0 ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/90" data-testid="no-storey">
+            <p className="text-sm">This project has no storey yet.</p>
+            <Button type="button" onClick={onImport}>
+              Back to import
+            </Button>
+          </div>
+        ) : null}
         <Toolbar />
         <PlanCanvas />
         {show3d ? <View3D projectId={projectId} elevation={elevation} /> : null}

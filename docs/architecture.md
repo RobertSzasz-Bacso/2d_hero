@@ -61,10 +61,11 @@ A linked source is used when the file is larger than 200 MB, or when the user ch
 | PUT | `/api/settings` | Title block, display unit, grid. |
 | PUT | `/api/settings/cursor-key` | Body `{ "key": "..." }`. Store in keyring. Response `{ "cursorKeySet": true }`. |
 | DELETE | `/api/settings/cursor-key` | Remove the key. |
-| GET | `/api/projects` | Recent projects. |
+| GET | `/api/projects` | Recent projects. Each item includes `importState` (`none`, `running`, `done`, `error`, `cancelled`), `importError`, `importProgress`, and `jobId`. A `running` record with no live job is reported as `error` with `The import was interrupted.` |
 | POST | `/api/projects` | Multipart file, or JSON `{ "linkPath": "..." }`. |
+| DELETE | `/api/projects/{id}` | Delete the project folder and drop it from the recent list. The linked source file is kept. 404 unknown. 409 `An import is running for this project.` |
 | POST | `/api/dialogs/open-file` | Native file dialog. Returns `{ "path": "..." }`. |
-| GET | `/api/projects/{id}` | Meta, revision, level summaries. Not the point cloud. |
+| GET | `/api/projects/{id}` | Meta, revision, level summaries, and the same import fields as the recent list. Not the point cloud. |
 | GET | `/api/projects/{id}/plan` | The plan JSON. |
 | PUT | `/api/projects/{id}/plan` | Body is the plan. Header `If-Match: <revision>`. Mismatch → 409 and the current plan. |
 | POST | `/api/projects/{id}/jobs` | Body `{ "kind": "import", "units": "m" or "mm" or "auto", "upAxis": "auto" or "x" or "y" or "z" }`. |

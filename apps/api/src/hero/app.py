@@ -23,7 +23,15 @@ from hero.ai.agent import CursorPlanAgent, PlanAgent
 from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.dialogs import ask_open_file
 from hero.errors import UNREADABLE, UnreadableFile
-from hero.jobs import JobBusy, cancel_job, job_snapshot, shutdown_pool, source_file, start_import
+from hero.jobs import (
+    JobBusy,
+    cancel_job,
+    import_status,
+    job_snapshot,
+    shutdown_pool,
+    source_file,
+    start_import,
+)
 from hero.keystore import cursor_key_is_set, delete_cursor_key, set_cursor_key
 from hero.paths import app_config_dir, default_projects_dir, web_dist
 from hero.pipeline.guess import guess_source
@@ -152,7 +160,8 @@ def create_app(
 
     @app.get("/api/projects")
     def get_projects() -> list[dict[str, object]]:
-        return project_store().list_recent()
+        store = project_store()
+        return [_with_import_status(store, item) for item in store.list_recent()]
 
     @app.post("/api/projects")
     async def create_project(request: Request) -> JSONResponse:
@@ -199,7 +208,8 @@ def create_app(
             )
         except JSONDecodeError:
             return JSONResponse({"detail": "Request was not valid."}, status_code=422)
-        return JSONResponse(project_store().describe(stored.id))
+        store = project_store()
+        return JSONResponse(_with_import_status(store, store.describe(stored.id)))
 
     @app.post("/api/dialogs/open-file")
     def open_file_dialog() -> JSONResponse:
@@ -210,10 +220,26 @@ def create_app(
 
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> JSONResponse:
+        store = project_store()
         try:
-            return JSONResponse(project_store().describe(project_id))
+            return JSONResponse(_with_import_status(store, store.describe(project_id)))
         except ProjectNotFound:
             return JSONResponse({"detail": "Project was not found."}, status_code=404)
+
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str) -> JSONResponse:
+        store = project_store()
+        try:
+            folder = store.project_dir(project_id)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        if import_status(folder).get("importState") == "running":
+            return JSONResponse(
+                {"detail": "An import is running for this project."},
+                status_code=409,
+            )
+        store.delete(project_id)
+        return JSONResponse({"deleted": True})
 
     @app.get("/api/projects/{project_id}/plan")
     def get_plan(project_id: str) -> JSONResponse:
@@ -383,6 +409,20 @@ def create_app(
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="web")
 
     return app
+
+
+def _with_import_status(store: ProjectStore, described: dict[str, object]) -> dict[str, object]:
+    project_id = described.get("id")
+    if not isinstance(project_id, str):
+        return described
+    try:
+        described.update(import_status(store.project_dir(project_id)))
+    except ProjectNotFound:
+        described["importState"] = "none"
+        described["importError"] = ""
+        described["jobId"] = None
+        described["importProgress"] = 0
+    return described
 
 
 def _parse_if_match(value: str | None) -> int | None:

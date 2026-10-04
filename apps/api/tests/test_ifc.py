@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from shapely.geometry import Polygon
 
 from hero.jobs import execute_import
@@ -67,6 +68,35 @@ def test_two_walls_fixture_imports_without_throwing() -> None:
     walls = [wall for level in levels for wall in level.walls]
     assert len(walls) == 2
     assert any(issue["code"] == "ifc_wall_from_solid" for issue in issues)
+
+
+def test_two_doors_in_one_wall_get_distinct_ids(tmp_path: Path) -> None:
+    from hero.testkit.writers import _write_ifc
+
+    building = build_building(1)
+    level = building.plan.levels[0]
+    door = next(opening for opening in level.openings if opening.kind == "door")
+    level.openings.append(door.model_copy(update={"id": "o2door", "offset": 0.7}))
+    path = tmp_path / "two-doors.ifc"
+    _write_ifc(path, building)
+    levels, _issues = read_ifc_plan(path)
+    doors = [opening for item in levels for opening in item.openings if opening.kind == "door"]
+    assert len(doors) >= 2
+    assert len({opening.id for opening in doors}) == len(doors)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["AC20-FZK-Haus.ifc", "Duplex_A_20110907.ifc", "Clinic_Architectural.ifc"],
+)
+def test_public_ifc_sample_imports(name: str) -> None:
+    path = ROOT / "samples" / "public" / name
+    if not path.is_file():
+        pytest.skip(f"Missing sample: {path}")
+    levels, _issues = read_ifc_plan(path)
+    walls = [wall for level in levels for wall in level.walls]
+    assert levels
+    assert walls
 
 
 def test_axis_wall_does_not_call_the_mesh_detector(tmp_path: Path) -> None:

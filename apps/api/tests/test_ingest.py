@@ -48,6 +48,39 @@ def test_three_degree_tilt_recovers_up(tmp_path: Path) -> None:
     assert angle < 1.0, f"up-axis error {angle:.3f} deg"
 
 
+def test_lopsided_floor_and_broad_ceiling_is_one_storey() -> None:
+    from hero.pipeline.normalize import _storeys
+
+    generator = np.random.default_rng(0)
+    floor_z = np.concatenate(
+        [generator.uniform(0.0, 0.05, 3000), generator.uniform(0.05, 0.10, 800)]
+    )
+    ceiling_z = generator.uniform(3.15, 3.35, 4000)
+    points = np.zeros((len(floor_z) + len(ceiling_z), 3))
+    points[: len(floor_z), 2] = floor_z
+    points[len(floor_z) :, 2] = ceiling_z
+    normals = np.zeros_like(points)
+    normals[: len(floor_z), 2] = 1.0
+    normals[len(floor_z) :, 2] = -1.0
+    levels, _hints = _storeys(points, normals)
+    assert len(levels) == 1
+    assert levels[0].elevation == pytest.approx(0.0, abs=0.05)
+
+
+def test_missing_ceiling_assumes_one_storey() -> None:
+    from hero.pipeline.normalize import _storeys
+
+    heights = np.concatenate([np.full(100, 0.7), np.full(5000, 1.0), np.full(100, 1.4)])
+    points = np.zeros((len(heights), 3))
+    points[:, 2] = heights
+    normals = np.zeros_like(points)
+    normals[:, 2] = 1.0
+    levels, hints = _storeys(points, normals)
+    assert len(levels) == 1
+    assert levels[0].ceiling_height == pytest.approx(2.7)
+    assert any(issue["code"] == "ceiling_missing" for issue in hints)
+
+
 def test_two_storeys_match_truth(tmp_path: Path) -> None:
     path = tmp_path / "building.obj"
     _write_obj(path)

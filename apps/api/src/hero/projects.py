@@ -174,6 +174,13 @@ class ProjectStore:
                 continue
         return listed
 
+    def delete(self, project_id: str) -> None:
+        """Remove the project folder and its recent entry. A linked source file is left in place."""
+        folder = self.project_dir(project_id)
+        shutil.rmtree(folder)
+        entries = [item for item in self._read_recent() if item["id"] != project_id]
+        self._write_recent(entries)
+
     def remember(self, project_id: str) -> None:
         folder = str(self.project_dir(project_id).resolve())
         entries = [item for item in self._read_recent() if item["id"] != project_id]
