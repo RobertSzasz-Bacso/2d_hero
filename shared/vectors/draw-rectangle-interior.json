@@ -1,0 +1,93 @@
+{
+  "name": "draw-rectangle-interior",
+  "op": "addRectangle",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Rectangle",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "from": {
+      "x": 0,
+      "y": 0
+    },
+    "to": {
+      "x": 4.8,
+      "y": 3.8
+    },
+    "thickness": 0.2,
+    "mode": "interior"
+  },
+  "expect": {
+    "areas": [
+      {
+        "id": "r1",
+        "area": 18.24
+      }
+    ],
+    "areaTolerance": 0.01,
+    "vertices": {
+      "v1": {
+        "x": -0.1,
+        "y": -0.1
+      },
+      "v2": {
+        "x": 4.9,
+        "y": -0.1
+      },
+      "v3": {
+        "x": 4.9,
+        "y": 3.9
+      },
+      "v4": {
+        "x": -0.1,
+        "y": 3.9
+      }
+    },
+    "vertexTolerance": 1e-9
+  }
+}

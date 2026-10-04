@@ -109,3 +109,8 @@ Reason: The owner needs an editor that behaves like architectural software befor
 
 Decision: The schema example, centerlines at 0 and 5 by 0 and 4 with wall thickness 0.20 m, has net area 18.24 m². That is (5.00 − 0.20) × (4.00 − 0.20).
 Reason: Walls are centred on the centerline and offset by thickness / 2, so the clear span loses half a thickness on each side. The earlier 16.56 m² figure subtracted the full thickness twice. The measured hole is 4.80 × 3.80 m.
+
+## 2026-10-04 — Typed values at the cursor
+
+Decision: The sidebar wall length, angle, and Apply inputs are removed. Length, angle, rectangle size, and opening distance are typed in a small input at the cursor, in the display unit. The sidebar keeps the wall thickness presets, the location line, and the rectangle mode.
+Reason: This matches architectural software: the number goes where the eye is, and the same input serves every drawing tool. One input that takes metres while the dimensions show centimetres led to wrong walls.

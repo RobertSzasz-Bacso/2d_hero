@@ -1,0 +1,78 @@
+{
+  "name": "draw-wall-location-right",
+  "op": "wallFromLocation",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Location",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "from": {
+      "x": 0,
+      "y": 0
+    },
+    "to": {
+      "x": 5,
+      "y": 0
+    },
+    "thickness": 0.2,
+    "location": "right"
+  },
+  "expect": {
+    "centerline": {
+      "a": {
+        "x": 0,
+        "y": 0.1
+      },
+      "b": {
+        "x": 5,
+        "y": 0.1
+      },
+      "tolerance": 1e-9
+    }
+  }
+}

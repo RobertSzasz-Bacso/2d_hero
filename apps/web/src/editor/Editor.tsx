@@ -95,6 +95,11 @@ export default function Editor({
         event.preventDefault()
         useEditor.getState().setShortcutsOpen(true)
       }
+      if (event.key.toLowerCase() === "r" && useEditor.getState().symbol && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        useEditor.getState().rotateSymbol()
+        return
+      }
       const toolKey: Record<string, "select" | "wall" | "door" | "window" | "room" | "column" | "stair" | "text"> = {
         v: "select",
         w: "wall",

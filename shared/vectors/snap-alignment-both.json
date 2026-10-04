@@ -1,0 +1,107 @@
+{
+  "name": "snap-alignment-both",
+  "op": "snap",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Alignment both",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [
+            {
+              "id": "v1",
+              "x": 0,
+              "y": 0
+            },
+            {
+              "id": "v2",
+              "x": 3,
+              "y": 0
+            },
+            {
+              "id": "v3",
+              "x": 0,
+              "y": 2
+            },
+            {
+              "id": "v4",
+              "x": 0,
+              "y": 4
+            }
+          ],
+          "walls": [
+            {
+              "id": "w1",
+              "a": "v1",
+              "b": "v2",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            },
+            {
+              "id": "w2",
+              "a": "v3",
+              "b": "v4",
+              "thickness": 0.2,
+              "kind": "exterior",
+              "confidence": 1
+            }
+          ],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "cursor": {
+      "x": 3.03,
+      "y": 2.04
+    },
+    "pixelsPerMeter": 100,
+    "gridM": 0.01
+  },
+  "expect": {
+    "kind": "alignment",
+    "id": "v2",
+    "point": {
+      "x": 3,
+      "y": 2
+    }
+  }
+}

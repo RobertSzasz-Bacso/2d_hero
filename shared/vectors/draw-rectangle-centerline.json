@@ -1,0 +1,92 @@
+{
+  "name": "draw-rectangle-centerline",
+  "op": "addRectangle",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": {
+        "name": "Rectangle",
+        "address": "",
+        "northAngleDeg": 0
+      },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": {
+        "source": null,
+        "issues": []
+      },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "from": {
+      "x": 5,
+      "y": 4
+    },
+    "to": {
+      "x": 0,
+      "y": 0
+    },
+    "thickness": 0.2,
+    "mode": "centerline"
+  },
+  "expect": {
+    "areas": [
+      {
+        "id": "r1",
+        "area": 18.24
+      }
+    ],
+    "areaTolerance": 0.01,
+    "vertices": {
+      "v1": {
+        "x": 0,
+        "y": 0
+      },
+      "v2": {
+        "x": 5,
+        "y": 0
+      },
+      "v3": {
+        "x": 5,
+        "y": 4
+      },
+      "v4": {
+        "x": 0,
+        "y": 4
+      }
+    }
+  }
+}

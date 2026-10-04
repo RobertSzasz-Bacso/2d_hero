@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { suppressDimension, syncAutoDimensions } from "@/core/dimensions.ts"
-import { copySelection as copyItems, pasteClipboard, type Clipboard } from "@/core/draw.ts"
+import { copySelection as copyItems, pasteClipboard, type Clipboard, type RectangleMode, type WallLocation } from "@/core/draw.ts"
 import { moveSelection } from "@/core/grips.ts"
 import { PlanHistory } from "@/core/history.ts"
 import { removeSelection } from "@/core/ops.ts"
@@ -13,6 +13,8 @@ import { toggleItem, type SelectionItem } from "./select.ts"
 export type EditorTool =
   | "select"
   | "wall"
+  | "rectangle"
+  | "dimension"
   | "door"
   | "window"
   | "passage"
@@ -44,7 +46,11 @@ type EditorState = {
   gridM: number
   tool: EditorTool
   symbol: Fixture["symbol"] | null
+  symbolRotation: number
   wallChain: WallChain | null
+  wallThickness: number
+  wallLocation: WallLocation
+  rectangleMode: RectangleMode
   separatorStart: Point | null
   clipboard: Clipboard | null
   shortcutsOpen: boolean
@@ -79,7 +85,11 @@ type EditorState = {
   saveNow: () => void
   setTool: (tool: EditorTool) => void
   setSymbol: (symbol: Fixture["symbol"]) => void
+  rotateSymbol: () => void
   setWallChain: (chain: WallChain | null) => void
+  setWallThickness: (thickness: number) => void
+  setWallLocation: (location: WallLocation) => void
+  setRectangleMode: (mode: RectangleMode) => void
   setSeparatorStart: (point: Point | null) => void
   setShortcutsOpen: (open: boolean) => void
   setHideFurniture: (hide: boolean) => void
@@ -128,7 +138,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   gridM: 1,
   tool: "select",
   symbol: null,
+  symbolRotation: 0,
   wallChain: null,
+  wallThickness: 0.2,
+  wallLocation: "center",
+  rectangleMode: "interior",
   separatorStart: null,
   clipboard: null,
   shortcutsOpen: false,
@@ -289,8 +303,16 @@ export const useEditor = create<EditorState>((set, get) => ({
       separatorStart: null,
       symbol: null,
     }),
-  setSymbol: (symbol) => set({ symbol, tool: "select", wallChain: null, separatorStart: null }),
+  setSymbol: (symbol) => set({ symbol, symbolRotation: 0, tool: "select", wallChain: null, separatorStart: null }),
+  rotateSymbol: () => set((state) => ({ symbolRotation: (state.symbolRotation + 90) % 360 })),
   setWallChain: (wallChain) => set({ wallChain }),
+  setWallThickness: (wallThickness) => {
+    if (wallThickness > 0 && wallThickness <= 1.5) {
+      set({ wallThickness })
+    }
+  },
+  setWallLocation: (wallLocation) => set({ wallLocation }),
+  setRectangleMode: (rectangleMode) => set({ rectangleMode }),
   setSeparatorStart: (separatorStart) => set({ separatorStart }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   setHideFurniture: (hideFurniture) => set({ hideFurniture }),

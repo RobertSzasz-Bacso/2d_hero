@@ -2,33 +2,49 @@ import { useEffect, useRef, useState } from "react"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu.tsx"
 import { changedWallIds } from "@/core/ai.ts"
 import { dimensionLabelPoint, roomLabelPoint } from "@/core/dimensions.ts"
-import { displayFromMetres, mergeCollinearWall, metresFromDisplay } from "@/core/draw.ts"
+import { displayFromMetres, mergeCollinearWall, metresFromDisplay, pointAtAngle } from "@/core/draw.ts"
 import { dot, footOnLine, rotate, sub } from "@/core/geom.ts"
 import { moveSelection, rehostOpening, setClearDistance, setOpeningEdge, setWallThicknessFromFace, snapFixtureToWall, wallFrame } from "@/core/grips.ts"
 import { applyTypedDimension, moveVertex, moveWall, setFixtureRotation, setFixtureSize, setOpening, setRoomName } from "@/core/ops.ts"
 import { pickAt } from "@/core/pick.ts"
 import type { Level, Plan, Point } from "@/core/plan-types.ts"
 import { extractRooms } from "@/core/rooms.ts"
-import { snapPoint } from "@/core/snap.ts"
+import { snapPoint, type SnapHit } from "@/core/snap.ts"
 import { editorTolerances } from "@/core/tolerances.ts"
 import type { SceneElement } from "@/drawing/scene.ts"
 import { planToScreen, screenToPlan } from "@/view/camera.ts"
-import { extendWall, placeColumn, placeFixture, placeOpening, placeSeparator, placeSplit, placeStair, placeText, startWall } from "./draw-actions.ts"
+import CursorInput, { type CursorEntry, type CursorField } from "./CursorInput.tsx"
+import {
+  extendWallTo,
+  placeColumn,
+  placeDimension,
+  placeOpeningAt,
+  placeRectangle,
+  placeSeparator,
+  placeSplit,
+  placeStair,
+  placeText,
+  startWall,
+} from "./draw-actions.ts"
 import { faceDragThickness, rotationFromGrip } from "./grip-math.ts"
 import Grips, { type GripSpec, type SnapGlyph, type TempDimension } from "./Grips.tsx"
 import { offsetAlongWall, openingEnds } from "./metrics.ts"
 import PlanSvg from "./PlanSvg.tsx"
 import { itemsInBox, type SelectionItem } from "./select.ts"
+import { placeArmedSymbol } from "./SymbolLibrary.tsx"
+import { dimensionOffset, dimensionRefAt, lengthAngle, openingGhost, orthoLock, rectangleCorner, type OpeningGhost } from "./tool-math.ts"
+import ToolOverlay, { type ToolPreview } from "./ToolOverlay.tsx"
 import UnderlayLayer from "./UnderlayLayer.tsx"
-import { useEditor } from "./store.ts"
+import { useEditor, type EditorTool } from "./store.ts"
 
-type SessionKind = "vertex" | "wall" | "opening" | "box" | "pan" | "grip" | "item"
+type SessionKind = "vertex" | "wall" | "opening" | "box" | "pan" | "grip" | "item" | "rect"
 
 type Session = {
   kind: SessionKind
   id?: string
   grip?: GripSpec
   items?: SelectionItem[]
+  anchor?: Point
   base: Plan
   origin: Point
   last: Point
@@ -62,6 +78,20 @@ function isPan(event: React.PointerEvent): boolean {
 
 const MOVABLE: ReadonlySet<SelectionItem["kind"]> = new Set(["fixture", "column", "text", "stair"])
 
+const OPENING_WIDTH_M = 0.9
+
+type OpeningTool = Extract<EditorTool, "door" | "window" | "passage">
+
+function isOpeningTool(tool: EditorTool): tool is OpeningTool {
+  return tool === "door" || tool === "window" || tool === "passage"
+}
+
+type DimensionPick = NonNullable<ReturnType<typeof dimensionRefAt>>
+
+function typedMetres(value: string, unit: "cm" | "mm"): number {
+  return metresFromDisplay(Number(value.trim().replace(",", ".")), unit)
+}
+
 export default function PlanCanvas() {
   const plan = useEditor((state) => state.history?.plan ?? null)
   const camera = useEditor((state) => state.camera)
@@ -81,6 +111,71 @@ export default function PlanCanvas() {
   const [hover, setHover] = useState<SceneElement | null>(null)
   const [snap, setSnap] = useState<SnapGlyph | null>(null)
   const [toolError, setToolError] = useState("")
+  const [cursor, setCursor] = useState<{ plan: Point; screen: Point } | null>(null)
+  const [guides, setGuides] = useState<{ from: Point; to: Point }[]>([])
+  const [rectStart, setRectStart] = useState<Point | null>(null)
+  const [dimPicks, setDimPicks] = useState<DimensionPick[]>([])
+  const [ghost, setGhost] = useState<(OpeningGhost & { kind: OpeningTool }) | null>(null)
+  const [entry, setEntry] = useState<CursorEntry | null>(null)
+  const wallChain = useEditor((state) => state.wallChain)
+  const wallThickness = useEditor((state) => state.wallThickness)
+  const wallLocation = useEditor((state) => state.wallLocation)
+  const rectangleMode = useEditor((state) => state.rectangleMode)
+  const symbolRotation = useEditor((state) => state.symbolRotation)
+  const live = useRef({ cursor, rectStart, ghost, entry })
+  live.current = { cursor, rectStart, ghost, entry }
+
+  useEffect(() => {
+    setRectStart(null)
+    setDimPicks([])
+    setGhost(null)
+    setEntry(null)
+    setGuides([])
+    setCursor(null)
+  }, [tool, symbol])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        return
+      }
+      if (event.key === "Escape") {
+        setRectStart(null)
+        setDimPicks([])
+        setEntry(null)
+        return
+      }
+      if (event.ctrlKey || event.metaKey || event.altKey || !/^[0-9.,]$/.test(event.key)) {
+        return
+      }
+      const state = useEditor.getState()
+      const now = live.current
+      let fields: CursorField[] | null = null
+      if (state.tool === "wall" && state.wallChain) {
+        const angle = now.cursor ? Math.round(lengthAngle(state.wallChain.anchorFace, now.cursor.plan).angleDeg) % 360 : 0
+        fields = [
+          { key: "length", label: "L", value: event.key },
+          { key: "angle", label: "∠", value: String(angle) },
+        ]
+      } else if (state.tool === "rectangle" && now.rectStart) {
+        fields = [
+          { key: "width", label: "W", value: event.key },
+          { key: "depth", label: "D", value: "" },
+        ]
+      } else if (isOpeningTool(state.tool) && now.ghost) {
+        fields = [{ key: "distance", label: "Dist", value: event.key }]
+      }
+      if (!fields) {
+        return
+      }
+      event.preventDefault()
+      const at = now.cursor?.screen ?? (now.ghost ? planToScreen(state.camera, now.ghost.start) : { x: 40, y: 40 })
+      setEntry({ fields, active: 0, at })
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   useEffect(() => {
     const node = host.current
@@ -124,7 +219,10 @@ export default function PlanCanvas() {
       dragRef.current = null
       setBox(null)
       setSnap(null)
-      if (session.moved && session.kind !== "box" && session.kind !== "pan") {
+      if (session.kind === "rect") {
+        setRectStart(null)
+      }
+      if (session.moved && session.kind !== "box" && session.kind !== "pan" && session.kind !== "rect") {
         useEditor.getState().cancelTransaction()
       }
     }
@@ -172,7 +270,7 @@ export default function PlanCanvas() {
       if (!session.moved && session.kind !== "pan" && distance < 4) {
         return
       }
-      if (!session.moved && session.kind !== "box" && session.kind !== "pan") {
+      if (!session.moved && session.kind !== "box" && session.kind !== "pan" && session.kind !== "rect") {
         useEditor.getState().beginTransaction()
       }
       session.moved = true
@@ -206,15 +304,28 @@ export default function PlanCanvas() {
     if (event.button !== 0) {
       return
     }
-    if (!isPlacing(useEditor.getState())) {
-      begin("box", event)
-      return
-    }
     const node = host.current
+    const state = useEditor.getState()
     if (!node) {
       return
     }
-    placeAt(localPoint(event, node))
+    if (isOpeningTool(state.tool)) {
+      if (ghost) {
+        placeGhost(ghost)
+      }
+      return
+    }
+    if (!isPlacing(state)) {
+      begin("box", event)
+      return
+    }
+    if (state.tool === "rectangle" && !state.symbol && !rectStart) {
+      const anchor = toolPoint(localPoint(event, node), event.shiftKey).point
+      setRectStart(anchor)
+      begin("rect", event, undefined, { anchor })
+      return
+    }
+    placeAt(localPoint(event, node), event.shiftKey)
   }
 
   function onHostMove(event: React.PointerEvent) {
@@ -222,15 +333,127 @@ export default function PlanCanvas() {
     if (!node || dragRef.current) {
       return
     }
-    if (!isPlacing(useEditor.getState())) {
+    const state = useEditor.getState()
+    const screen = localPoint(event, node)
+    if (isOpeningTool(state.tool)) {
+      if (!entry) {
+        setGhost(ghostAt(screen, state.tool))
+      }
+      return
+    }
+    if (!isPlacing(state)) {
       if (snap) {
         setSnap(null)
       }
       return
     }
-    const screen = localPoint(event, node)
-    const hit = snapAt(screen)
-    setSnap(hit ? { at: planToScreen(useEditor.getState().camera, hit.point), kind: hit.kind } : null)
+    if (state.tool === "dimension" && !state.symbol) {
+      const current = state.history?.plan
+      const levelNow = current ? shownLevel(current) : undefined
+      const raw = screenToPlan(state.camera, screen)
+      const found = levelNow ? dimensionRefAt(levelNow, raw, editorTolerances.snap_px / state.camera.pixelsPerMeter) : null
+      setSnap(found ? { at: planToScreen(state.camera, found.point), kind: found.ref.type === "vertex" ? "vertex" : "opening-edge" } : null)
+      setCursor({ plan: raw, screen })
+      return
+    }
+    const { point, hit } = toolPoint(screen, event.shiftKey)
+    setSnap(hit ? { at: planToScreen(state.camera, hit.point), kind: hit.kind } : null)
+    setGuides(hit?.kind === "alignment" ? (hit.guides ?? []).map((from) => ({ from, to: point })) : [])
+    setCursor({ plan: point, screen })
+  }
+
+  /** The tool point under the cursor: snapped, then locked to 0° or 90° from the anchor while Shift is down. */
+  function toolPoint(screen: Point, shift: boolean): { point: Point; hit: SnapHit | null } {
+    const state = useEditor.getState()
+    const raw = screenToPlan(state.camera, screen)
+    const current = state.history?.plan
+    const levelNow = current ? shownLevel(current) : undefined
+    const chain = state.tool === "wall" ? state.wallChain : null
+    const anchor = chain ? chain.anchorFace : state.tool === "rectangle" ? rectStart : null
+    const previous = chain?.previous
+      ? { x: chain.anchorFace.x, y: chain.anchorFace.y, dirX: chain.previous.to.x - chain.previous.from.x, dirY: chain.previous.to.y - chain.previous.from.y }
+      : undefined
+    const hit =
+      current && levelNow
+        ? snapPoint({ plan: current, levelId: levelNow.id, cursor: raw, pixelsPerMeter: state.camera.pixelsPerMeter, gridM: state.gridM, previous })
+        : null
+    const point = hit?.point ?? raw
+    return { point: shift && anchor ? orthoLock(anchor, point) : point, hit }
+  }
+
+  function ghostAt(screen: Point, kind: OpeningTool): (OpeningGhost & { kind: OpeningTool }) | null {
+    const state = useEditor.getState()
+    const current = state.history?.plan
+    const levelNow = current ? shownLevel(current) : undefined
+    if (!current || !levelNow) {
+      return null
+    }
+    const raw = screenToPlan(state.camera, screen)
+    const wall = pickAt(current, levelNow.id, raw, editorTolerances.snap_px / state.camera.pixelsPerMeter).find((item) => item.kind === "wall")
+    const found = wall ? openingGhost(levelNow, wall.id, raw, OPENING_WIDTH_M) : null
+    return found ? { ...found, kind } : null
+  }
+
+  function placeGhost(target: OpeningGhost & { kind: OpeningTool }, distance?: number) {
+    const state = useEditor.getState()
+    const current = state.history?.plan
+    if (!current) {
+      return
+    }
+    const along = distance ?? (target.end === "a" ? target.distStart : target.distEnd)
+    run(
+      () => placeOpeningAt(current, target.wallId, target.kind, target.end, along, target.width, target.swingSide, state.activeLevelId),
+      "The opening was not placed.",
+    )
+  }
+
+  function applyEntry(typed: CursorEntry) {
+    const state = useEditor.getState()
+    const current = state.history?.plan
+    const value = (key: string) => typed.fields.find((field) => field.key === key)?.value ?? ""
+    setEntry(null)
+    if (!current) {
+      return
+    }
+    if (state.tool === "wall" && state.wallChain) {
+      const metres = typedMetres(value("length"), state.dimensionUnit)
+      const degrees = Number(value("angle").trim().replace(",", ".") || "0")
+      if (!(metres > 0) || !Number.isFinite(degrees)) {
+        setToolError("Type a length greater than 0 and an angle in degrees.")
+        return
+      }
+      const chain = state.wallChain
+      try {
+        const drawn = extendWallTo(current, chain, pointAtAngle(chain.anchorFace, metres, degrees), state.wallThickness, state.wallLocation, state.activeLevelId)
+        state.commit(drawn.plan)
+        state.setWallChain(drawn.chain)
+        setToolError("")
+      } catch (caught) {
+        setToolError(caught instanceof Error ? caught.message : "The wall was not drawn.")
+      }
+      return
+    }
+    if (state.tool === "rectangle" && rectStart) {
+      const width = typedMetres(value("width"), state.dimensionUnit)
+      const depth = typedMetres(value("depth"), state.dimensionUnit)
+      if (!(width > 0) || !(depth > 0)) {
+        setToolError("Type a width and a depth greater than 0.")
+        return
+      }
+      const from = rectStart
+      const to = rectangleCorner(from, cursor?.plan ?? from, width, depth)
+      run(() => placeRectangle(current, from, to, state.wallThickness, state.rectangleMode, state.activeLevelId), "The rectangle was not drawn.")
+      setRectStart(null)
+      return
+    }
+    if (isOpeningTool(state.tool) && ghost) {
+      const distance = typedMetres(value("distance"), state.dimensionUnit)
+      if (!(distance >= 0)) {
+        setToolError("Type a distance of 0 or more.")
+        return
+      }
+      placeGhost(ghost, distance)
+    }
   }
 
   function onElementDown(element: SceneElement, event: React.PointerEvent) {
@@ -248,7 +471,14 @@ export default function PlanCanvas() {
     event.stopPropagation()
     const state = useEditor.getState()
     if (isPlacing(state)) {
-      placeAt(localPoint(event, node))
+      placeAt(localPoint(event, node), event.shiftKey)
+      return
+    }
+    if (isOpeningTool(state.tool)) {
+      const target = ghostAt(localPoint(event, node), state.tool)
+      if (target) {
+        placeGhost(target)
+      }
       return
     }
     if (state.tool !== "select") {
@@ -279,7 +509,7 @@ export default function PlanCanvas() {
     event.stopPropagation()
     const state = useEditor.getState()
     if (isPlacing(state)) {
-      placeAt(localPoint(event, node))
+      placeAt(localPoint(event, node), event.shiftKey)
       return
     }
     if (state.tool !== "select") {
@@ -374,6 +604,19 @@ export default function PlanCanvas() {
   const menuOpening = menu?.hit?.kind === "opening" ? level?.openings.find((item) => item.id === menu.hit?.id) : undefined
   const menuWall = menu?.hit?.kind === "wall" ? menu.hit.id : null
 
+  const toolPreview: ToolPreview = { guides }
+  if (symbol && cursor) {
+    toolPreview.symbol = { symbol, at: cursor.plan, rotationDeg: symbolRotation }
+  } else if (tool === "wall" && wallChain && cursor) {
+    toolPreview.wall = { from: wallChain.anchorFace, to: cursor.plan, thickness: wallThickness, location: wallLocation }
+  } else if (tool === "rectangle" && rectStart && cursor) {
+    toolPreview.rect = { from: rectStart, to: cursor.plan, thickness: wallThickness, mode: rectangleMode }
+  } else if (tool === "dimension" && dimPicks.length > 0 && cursor) {
+    toolPreview.dimension = { points: dimPicks.map((pick) => pick.point), cursor: cursor.plan }
+  } else if (isOpeningTool(tool) && ghost) {
+    toolPreview.ghost = ghost
+  }
+
   return (
     <ContextMenu onOpenChange={(open) => (open ? undefined : setMenu(null))}>
       <ContextMenuTrigger asChild>
@@ -417,8 +660,10 @@ export default function PlanCanvas() {
                 onTempDimension={onTempDimension}
                 onFlip={onFlip}
               />
+              <ToolOverlay preview={toolPreview} camera={camera} unit={dimensionUnit} />
             </PlanSvg>
           ) : null}
+          {entry ? <CursorInput entry={entry} onChange={setEntry} onApply={applyEntry} onCancel={() => setEntry(null)} /> : null}
           {dimensionEdit && editingSegment ? (
             <input
               className="absolute z-30 w-16 -translate-x-1/2 -translate-y-1/2 border border-blue-600 bg-white px-1 text-xs"
@@ -579,38 +824,16 @@ export default function PlanCanvas() {
     }
   }
 
-  function snapAt(screen: Point, excludeVertexIds?: string[]) {
-    const state = useEditor.getState()
-    const raw = screenToPlan(state.camera, screen)
-    const current = state.history?.plan
-    const levelNow = current ? shownLevel(current) : undefined
-    if (!current || !levelNow) {
-      return null
-    }
-    return snapPoint({
-      plan: current,
-      levelId: levelNow.id,
-      cursor: raw,
-      pixelsPerMeter: state.camera.pixelsPerMeter,
-      gridM: state.gridM,
-      excludeVertexIds,
-    })
-  }
-
-  function snappedPoint(screen: Point): Point {
-    return snapAt(screen)?.point ?? screenToPlan(useEditor.getState().camera, screen)
-  }
-
-  function placeAt(screen: Point) {
+  function placeAt(screen: Point, shift = false) {
     const state = useEditor.getState()
     const current = state.history?.plan
     if (!current) {
       return
     }
-    const point = snappedPoint(screen)
+    const point = toolPoint(screen, shift).point
     try {
       if (state.symbol) {
-        state.commit(placeFixture(current, state.symbol, point, state.activeLevelId))
+        placeArmedSymbol(point)
         state.setTool("select")
         setSnap(null)
         setToolError("")
@@ -622,21 +845,49 @@ export default function PlanCanvas() {
           state.commit(started.plan)
           state.setWallChain(started.chain)
         } else {
-          const anchor = shownLevel(current)?.vertices.find((vertex) => vertex.id === state.wallChain?.anchorId)
-          if (!anchor) {
+          if (Math.hypot(point.x - state.wallChain.anchorFace.x, point.y - state.wallChain.anchorFace.y) <= 0.001) {
             return
           }
-          const dx = point.x - anchor.x
-          const dy = point.y - anchor.y
-          const length = Math.hypot(dx, dy)
-          if (length <= 0.001) {
-            return
-          }
-          const angle = (Math.atan2(dy, dx) * 180) / Math.PI
-          const drawn = extendWall(current, state.wallChain, length, angle, state.activeLevelId)
+          const drawn = extendWallTo(current, state.wallChain, point, state.wallThickness, state.wallLocation, state.activeLevelId)
           state.commit(drawn.plan)
           state.setWallChain(drawn.chain)
         }
+        setToolError("")
+        return
+      }
+      if (state.tool === "rectangle") {
+        if (!rectStart) {
+          setRectStart(point)
+        } else {
+          state.commit(placeRectangle(current, rectStart, point, state.wallThickness, state.rectangleMode, state.activeLevelId))
+          setRectStart(null)
+        }
+        setToolError("")
+        return
+      }
+      if (state.tool === "dimension") {
+        const levelNow = shownLevel(current)
+        if (!levelNow) {
+          return
+        }
+        const raw = screenToPlan(state.camera, screen)
+        const [first, second] = dimPicks
+        if (first && second) {
+          const offset = Math.round(dimensionOffset(first.point, second.point, raw) * 1000) / 1000
+          state.commit(placeDimension(current, [first.ref, second.ref], offset, levelNow.id))
+          setDimPicks([])
+          setToolError("")
+          return
+        }
+        const found = dimensionRefAt(levelNow, raw, editorTolerances.snap_px / state.camera.pixelsPerMeter)
+        if (!found) {
+          setToolError("Click a corner or an opening edge.")
+          return
+        }
+        if (first && JSON.stringify(first.ref) === JSON.stringify(found.ref)) {
+          return
+        }
+        setDimPicks([...dimPicks, found])
         setToolError("")
         return
       }
@@ -679,19 +930,17 @@ export default function PlanCanvas() {
       return
     }
     if (isPlacing(state)) {
-      placeAt(localPoint(event, node))
+      placeAt(localPoint(event, node), event.shiftKey)
       return
     }
-    if (state.tool === "door" || state.tool === "window" || state.tool === "passage") {
-      const wall = levelNow.walls.find((item) => item.id === wallId)
-      const a = wall ? levelNow.vertices.find((vertex) => vertex.id === wall.a) : undefined
-      const b = wall ? levelNow.vertices.find((vertex) => vertex.id === wall.b) : undefined
-      if (!wall || !a || !b) {
-        return
-      }
+    if (isOpeningTool(state.tool)) {
       const point = screenToPlan(state.camera, localPoint(event, node))
-      const tool = state.tool
-      run(() => placeOpening(current, wallId, tool, offsetAlongWall(a, b, point, 0.9), state.activeLevelId), "The opening was not placed.")
+      const target = openingGhost(levelNow, wallId, point, OPENING_WIDTH_M)
+      if (target) {
+        placeGhost({ ...target, kind: state.tool })
+      } else {
+        setToolError("The opening does not fit on this wall.")
+      }
       return
     }
     if (state.tool === "split") {
@@ -748,6 +997,13 @@ export default function PlanCanvas() {
     if (session.kind === "box") {
       session.last = screen
       setBox({ x0: session.origin.x, y0: session.origin.y, x1: screen.x, y1: screen.y })
+      return
+    }
+    if (session.kind === "rect") {
+      session.last = screen
+      const { point, hit } = toolPoint(screen, false)
+      setSnap(hit ? { at: planToScreen(state.camera, hit.point), kind: hit.kind } : null)
+      setCursor({ plan: point, screen })
       return
     }
     session.last = screen
@@ -832,6 +1088,16 @@ export default function PlanCanvas() {
     setBox(null)
     setSnap(null)
     const state = useEditor.getState()
+    if (session.kind === "rect") {
+      const current = state.history?.plan
+      if (session.moved && session.anchor && current) {
+        const from = session.anchor
+        const to = toolPoint(screen, false).point
+        run(() => placeRectangle(current, from, to, state.wallThickness, state.rectangleMode, state.activeLevelId), "The rectangle was not drawn.")
+        setRectStart(null)
+      }
+      return
+    }
     if (session.kind === "vertex" || session.kind === "wall" || session.kind === "opening" || session.kind === "grip" || session.kind === "item") {
       if (!session.moved) {
         if (session.kind === "grip") {

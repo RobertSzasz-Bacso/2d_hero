@@ -3,10 +3,21 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { intersection } from "polygon-clipping"
 import { describe, expect, it } from "vitest"
-import type { Plan, Point } from "./plan-types.ts"
-import { addTypedWall, mergeCollinearWall, splitWall } from "./draw.ts"
+import type { Dimension, Opening, Plan, Point } from "./plan-types.ts"
+import {
+  addDimension,
+  addRectangle,
+  addTypedWall,
+  mergeCollinearWall,
+  placeOpeningAtDistance,
+  splitWall,
+  wallFromLocation,
+  type RectangleMode,
+  type WallLocation,
+} from "./draw.ts"
 import {
   applyTypedDimension,
+  type DimensionRef,
   moveVertex,
   moveWall,
   removeSelection,
@@ -70,6 +81,16 @@ type VectorCase = {
     amountM?: number
     items?: { kind: SelectionKind; id: string }[]
     free?: boolean
+    from?: Point
+    to?: Point
+    location?: WallLocation
+    mode?: RectangleMode
+    openingKind?: Opening["kind"]
+    end?: "a" | "b"
+    width?: number
+    swingSide?: Opening["swingSide"]
+    refs?: DimensionRef[]
+    offset?: number
   }
   expect: {
     areas?: { id: string; area: number }[]
@@ -108,10 +129,26 @@ type VectorCase = {
     clear?: { wallId: string; otherId: string; distance: number; tolerance: number }
     opening?: { id: string; wall: string; width: number; tolerance: number; startEdge?: Point; center?: Point }
     fixture?: { id: string; x: number; y: number; rotationDeg: number; tolerance: number }
+    vertexTolerance?: number
+    centerline?: { a: Point; b: Point; tolerance: number }
+    dimension?: Dimension
   }
 }
 
-const gripOps: Record<string, (vector: VectorCase) => Plan> = {
+const planOps: Record<string, (vector: VectorCase) => Plan> = {
+  addRectangle: (v) => addRectangle(v.input.plan, v.input.levelId, v.input.from ?? { x: 0, y: 0 }, v.input.to ?? { x: 0, y: 0 }, v.input.thickness ?? 0, v.input.mode ?? "centerline"),
+  placeOpeningAtDistance: (v) =>
+    placeOpeningAtDistance(
+      v.input.plan,
+      v.input.levelId,
+      v.input.wallId ?? "",
+      v.input.openingKind ?? "door",
+      v.input.end ?? "a",
+      v.input.distance ?? Number.NaN,
+      v.input.width ?? 0,
+      v.input.swingSide ?? "positive",
+    ),
+  addDimension: (v) => addDimension(v.input.plan, v.input.levelId, v.input.refs ?? [], v.input.offset ?? 0),
   setWallThicknessFromFace: (v) => setWallThicknessFromFace(v.input.plan, v.input.levelId, v.input.wallId ?? "", v.input.thickness ?? 0, v.input.keep ?? "center"),
   setClearDistance: (v) => setClearDistance(v.input.plan, v.input.levelId, v.input.wallId ?? "", v.input.otherId ?? "", v.input.distance ?? 0),
   setOpeningEdge: (v) => setOpeningEdge(v.input.plan, v.input.levelId, v.input.openingId ?? "", v.input.edge ?? "end", v.input.amountM ?? 0),
@@ -120,11 +157,11 @@ const gripOps: Record<string, (vector: VectorCase) => Plan> = {
   snapFixtureToWall: (v) => snapFixtureToWall(v.input.plan, v.input.levelId, v.input.fixtureId ?? "", v.input.toleranceM ?? 0),
 }
 
-function assertGrip(vector: VectorCase) {
+function assertPlanOp(vector: VectorCase) {
   const before = JSON.stringify(vector.input.plan)
-  const run = gripOps[vector.op]
+  const run = planOps[vector.op]
   if (!run) {
-    throw new Error(`unknown grip op ${vector.op}`)
+    throw new Error(`unknown plan op ${vector.op}`)
   }
   if (vector.expect.error) {
     expect(() => run(vector)).toThrow()
@@ -169,6 +206,9 @@ function assertGrip(vector: VectorCase) {
     expect(Math.abs((fixture?.x ?? Number.NaN) - expected.x)).toBeLessThanOrEqual(expected.tolerance)
     expect(Math.abs((fixture?.y ?? Number.NaN) - expected.y)).toBeLessThanOrEqual(expected.tolerance)
     expect(Math.abs((fixture?.rotationDeg ?? Number.NaN) - expected.rotationDeg)).toBeLessThanOrEqual(expected.tolerance)
+  }
+  if (vector.expect.dimension) {
+    expect(level.dimensions.find((item) => item.id === vector.expect.dimension?.id)).toEqual(vector.expect.dimension)
   }
   assertMoved(vector, next)
 }
@@ -449,8 +489,14 @@ function assertMoved(vector: VectorCase, plan: Plan) {
   for (const [id, point] of Object.entries(vector.expect.vertices ?? {})) {
     const vertex = verts.get(id)
     expect(vertex, id).toBeDefined()
-    expect(vertex?.x).toBe(point.x)
-    expect(vertex?.y).toBe(point.y)
+    const tolerance = vector.expect.vertexTolerance
+    if (tolerance === undefined) {
+      expect(vertex?.x).toBe(point.x)
+      expect(vertex?.y).toBe(point.y)
+    } else {
+      expect(Math.abs((vertex?.x ?? Number.NaN) - point.x), id).toBeLessThanOrEqual(tolerance)
+      expect(Math.abs((vertex?.y ?? Number.NaN) - point.y), id).toBeLessThanOrEqual(tolerance)
+    }
   }
   const base = referenceAngle(vector)
   if (base === null) {
@@ -598,8 +644,18 @@ describe("shared vectors", () => {
         expect(snapRotation(vector.input.rotationDeg ?? Number.NaN, vector.input.free ?? false)).toBe(vector.expect.rotationDeg)
         return
       }
-      if (vector.op in gripOps) {
-        assertGrip(vector)
+      if (vector.op === "wallFromLocation") {
+        const line = wallFromLocation(vector.input.from ?? { x: 0, y: 0 }, vector.input.to ?? { x: 0, y: 0 }, vector.input.thickness ?? 0, vector.input.location ?? "center")
+        const expected = vector.expect.centerline
+        if (!expected) {
+          throw new Error("wallFromLocation needs expect.centerline")
+        }
+        expect(Math.hypot(line.a.x - expected.a.x, line.a.y - expected.a.y)).toBeLessThanOrEqual(expected.tolerance)
+        expect(Math.hypot(line.b.x - expected.b.x, line.b.y - expected.b.y)).toBeLessThanOrEqual(expected.tolerance)
+        return
+      }
+      if (vector.op in planOps) {
+        assertPlanOp(vector)
         return
       }
       throw new Error(`unknown op ${vector.op}`)

@@ -1,4 +1,4 @@
-"""Snap priority: vertex, midpoint, intersection, foot, extension, angle, grid."""
+"""Snap priority: vertex, midpoint, intersection, foot, extension, alignment, angle, grid."""
 
 from __future__ import annotations
 
@@ -24,8 +24,9 @@ _PRIORITY = {
     "intersection": 3,
     "foot": 4,
     "extension": 5,
-    "angle": 6,
-    "grid": 7,
+    "alignment": 6,
+    "angle": 7,
+    "grid": 8,
 }
 
 
@@ -88,6 +89,27 @@ def snap_point(plan: Any, level_id: str, cursor: Any, pixels_per_meter: float,
             hit = segment_intersect(left["a"], left["b"], right["a"], right["b"])
             if hit is not None:
                 _consider(candidates, "intersection", hit["point"], cursor, tolerance, left["id"])
+    align_x: tuple[float, Any] | None = None
+    align_y: tuple[float, Any] | None = None
+    for vertex in level.vertices:
+        gap_x = abs(cursor.x - vertex.x)
+        if gap_x <= tolerance and (align_x is None or gap_x < align_x[0]):
+            align_x = (gap_x, vertex)
+        gap_y = abs(cursor.y - vertex.y)
+        if gap_y <= tolerance and (align_y is None or gap_y < align_y[0]):
+            align_y = (gap_y, vertex)
+    if align_x is not None or align_y is not None:
+        aligned = {
+            "x": align_x[1].x if align_x is not None else cursor.x,
+            "y": align_y[1].y if align_y is not None else cursor.y,
+        }
+        guides = [{"x": item[1].x, "y": item[1].y} for item in (align_x, align_y) if item]
+        source = align_x if align_x is not None else align_y
+        candidates.append(
+            {"kind": "alignment", "point": aligned, "id": source[1].id if source else None,
+                "guides": guides, "priority": _PRIORITY["alignment"],
+                "distance": dist(aligned, cursor)}
+        )
     if previous is not None:
         anchor = {"x": previous.x, "y": previous.y}
         direction = unit({"x": previous.dirX, "y": previous.dirY})
@@ -114,4 +136,7 @@ def snap_point(plan: Any, level_id: str, cursor: Any, pixels_per_meter: float,
         return None
     candidates.sort(key=lambda item: (item["priority"], item["distance"]))
     best = candidates[0]
-    return {"kind": best["kind"], "point": best["point"], "id": best["id"]}
+    hit = {"kind": best["kind"], "point": best["point"], "id": best["id"]}
+    if "guides" in best:
+        hit["guides"] = best["guides"]
+    return hit

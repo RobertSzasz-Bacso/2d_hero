@@ -2,12 +2,14 @@ import { add, dist, dot, footOnLine, mul, rotate, segmentIntersect, unit } from 
 import type { Level, Plan, Point } from "./plan-types.ts"
 import { editorTolerances } from "./tolerances.ts"
 
-export type SnapKind = "vertex" | "midpoint" | "intersection" | "foot" | "extension" | "angle" | "grid"
+export type SnapKind = "vertex" | "midpoint" | "intersection" | "foot" | "extension" | "alignment" | "angle" | "grid"
 
 export type SnapHit = {
   kind: SnapKind
   point: Point
   id?: string
+  /** Vertices an alignment snap lines up with. The tool draws a dashed guide from each. */
+  guides?: Point[]
 }
 
 type Candidate = SnapHit & { priority: number; distance: number }
@@ -18,8 +20,9 @@ const priority: Record<SnapKind, number> = {
   intersection: 3,
   foot: 4,
   extension: 5,
-  angle: 6,
-  grid: 7,
+  alignment: 6,
+  angle: 7,
+  grid: 8,
 }
 
 function levelOf(plan: Plan, levelId: string): Level {
@@ -100,6 +103,34 @@ export function snapPoint(input: {
     }
   }
 
+  let alignX: { id: string; point: Point; gap: number } | null = null
+  let alignY: { id: string; point: Point; gap: number } | null = null
+  for (const vertex of level.vertices) {
+    if (excluded.has(vertex.id)) {
+      continue
+    }
+    const gapX = Math.abs(input.cursor.x - vertex.x)
+    if (gapX <= tolerance && (!alignX || gapX < alignX.gap)) {
+      alignX = { id: vertex.id, point: vertex, gap: gapX }
+    }
+    const gapY = Math.abs(input.cursor.y - vertex.y)
+    if (gapY <= tolerance && (!alignY || gapY < alignY.gap)) {
+      alignY = { id: vertex.id, point: vertex, gap: gapY }
+    }
+  }
+  if (alignX || alignY) {
+    const point = { x: alignX ? alignX.point.x : input.cursor.x, y: alignY ? alignY.point.y : input.cursor.y }
+    const guides = [alignX, alignY].filter((item) => item !== null).map((item) => ({ x: item.point.x, y: item.point.y }))
+    candidates.push({
+      kind: "alignment",
+      point,
+      id: (alignX ?? alignY)?.id,
+      guides,
+      priority: priority.alignment,
+      distance: dist(point, input.cursor),
+    })
+  }
+
   if (input.previous) {
     const anchor = { x: input.previous.x, y: input.previous.y }
     const direction = unit({ x: input.previous.dirX, y: input.previous.dirY })
@@ -131,7 +162,7 @@ export function snapPoint(input: {
   if (!best) {
     return null
   }
-  return { kind: best.kind, point: best.point, id: best.id }
+  return best.guides ? { kind: best.kind, point: best.point, id: best.id, guides: best.guides } : { kind: best.kind, point: best.point, id: best.id }
 }
 
 function subPoint(a: Point, b: Point): Point {

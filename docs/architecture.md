@@ -113,11 +113,12 @@ The plan view (`apps/web/src/editor/PlanSvg.tsx`) is one SVG that renders the sc
 - Grips on a selected fixture: move, rotate (15° steps, Shift for free), and resize width and depth. A fixture released within `snap_px` of a wall face turns its back (local +Y) to that face and touches it.
 - Right-click opens a context menu: delete, split wall here, merge collinear, flip hinge, flip side.
 - Arrow keys move the selection by the grid step, Shift by ten steps.
-- Wall tool: live preview to the cursor with length and angle; type a length and angle at the cursor (Tab switches, Enter applies); Shift locks to 0° or 90°; thickness presets 10, 12.5, 15, 20, 25, 30, 36.5 cm or custom; location line centre, left face, or right face (an editor setting, not stored); dashed alignment guides.
-- Rectangle tool: drag two corners or type width and depth, by interior (the clear room) or by centerline.
-- Door and window tools: a ghost at true width follows the hovered wall with live distances to the nearest faces. A typed distance places the near edge that far from the nearer inner corner. The swing goes to the side of the wall the cursor is on.
-- Symbol library: thumbnails of the symbols, drag and drop onto the plan, R rotates 90° while placing.
-- Dimension tool: click two vertices or opening edges, then the offset. The chain is stored with `auto: false`.
+- Typed values at the cursor: with a drawing tool active, pressing a digit opens a small input next to the cursor. Values are in the display unit (cm or mm), angles in degrees. Tab moves to the next field, Enter applies, Escape cancels.
+- Wall tool: live poche preview to the cursor with length and angle; type a length and angle at the cursor; Shift locks to 0° or 90°; thickness presets 10, 12.5, 15, 20, 25, 30, 36.5 cm or custom; location line centre, left face, or right face (an editor setting, not stored); dashed alignment guides. The previous segment feeds the angle-lock snap.
+- Rectangle tool: drag two corners, or click one corner and type width and depth (they extend toward the cursor), by interior (the clear room) or by centerline. It adds a room seed at the centre.
+- Door, window, and passage tools: a 0.90 m ghost follows the hovered wall, kept between its inner corners, with live distances to both inner corners. Click to place it, or type a distance to place the near edge that far from the nearer inner corner. The swing goes to the side of the wall the cursor is on.
+- Symbol library: thumbnails drawn from `symbols.ts`. Drag one onto the plan, or click it and then click the plan. R turns the symbol 90° while placing. A symbol placed within `snap_px` of a wall face turns its back to that face.
+- Dimension tool: click two vertices or opening edges, then click where the line goes. The chain is stored with `auto: false` and survives reload and auto-dimension refresh.
 - Wheel zooms at the cursor. Middle mouse or space-drag pans. Fit (F) frames the plan.
 - Undo (Ctrl+Z) and redo (Ctrl+Y) use the immer patch stack, cap 100. Accepting an AI proposal is one undo step.
 - Autosave: 400 ms after a change, and immediately on pointer-up. No save during pointer-move. `If-Match` carries the revision. 409 replaces the local plan with the server plan and shows `This plan was saved somewhere else. Reloaded.`

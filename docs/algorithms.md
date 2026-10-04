@@ -311,7 +311,7 @@ These back the Phase 18 grips and the Phase 19 tools. Each has a JSON case in `s
 - `moveSelection(items, delta)`: moves every vertex referenced by a selected vertex, wall, or separator, every selected fixture, column, and text insertion point, every selected stair outline, and every selected room seed, by exactly `delta`. Openings ride on their walls.
 - `snapRotation(deg, free)`: without `free`, round to the nearest multiple of 15°.
 - `snapFixtureToWall(fixture, toleranceM)`: find the wall face nearest to the fixture center whose distance from the fixture's back edge is within `toleranceM`. Rotate the fixture so local +Y points from the room toward that face, and move it along the face normal so the back edge lies on the face. No face within tolerance: unchanged.
-- `wallFromLocation(p, q, thickness, location)`: `location` is `center`, `left`, or `right`. The clicked line `p → q` is that face. For `left` the centerline is the clicked line offset by `−n · thickness / 2`; for `right` by `+n · thickness / 2`.
+- `wallFromLocation(p, q, thickness, location)`: `location` is `center`, `left`, or `right`. The clicked line `p → q` is that face. For `left` the centerline is the clicked line offset by `−n · thickness / 2`; for `right` by `+n · thickness / 2`. In a wall chain the shared vertex of two segments is the intersection of their two offset centerlines, and closing on the start point moves the start vertex to the intersection of the last and first centerlines. Drawn counter-clockwise, `left` makes the clicked box the clear room.
 - `addRectangle(c1, c2, thickness, mode)`: four vertices and four closed walls, counter-clockwise. `mode = interior`: the box `c1, c2` is the clear room, so centerlines are offset outward by `thickness / 2`. `mode = centerline`: the box is the centerline. A 4.80 × 3.80 m interior box with 0.20 m walls has 5.00 × 4.00 m centerlines and 18.24 m² net.
 - `placeOpeningAtDistance(wall, kind, end, distance, width)`: `end` is `a` or `b`. The inner corner at that end is the end vertex moved along the wall by half the thickest other wall meeting that vertex (zero if none). The near edge of the opening is placed `distance` from that corner along the wall.
 - `addDimension(refs, offset)`: a chain through two or more references, `auto: false`.
@@ -325,7 +325,7 @@ A candidate must lie within `snap_px` of the cursor. Higher priority wins even i
 3. Intersection of two centerlines.
 4. Perpendicular foot on a centerline.
 5. Extension of a centerline beyond an end, up to 2 m.
-6. Alignment: the cursor's x is within `snap_px` of a vertex's x, or its y of a vertex's y. The point takes that coordinate and keeps the cursor's other one. When both an x and a y alignment exist, the point takes both. The tool draws a dashed guide from the aligned vertex.
+6. Alignment: the cursor's x is within `snap_px` of a vertex's x, or its y of a vertex's y. The point takes that coordinate and keeps the cursor's other one. When both an x and a y alignment exist, the point takes both, so the point can be up to √2 · `snap_px` from the cursor. The nearest vertex on each axis wins; the hit's id is the x-aligned vertex when there is one. The tool draws a dashed guide from each aligned vertex.
 7. Angle lock to 0°, 45°, or 90° from the previous wall-tool segment.
 8. Grid.
 

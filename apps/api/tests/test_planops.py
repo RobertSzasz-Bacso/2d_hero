@@ -7,7 +7,15 @@ from pathlib import Path
 import pytest
 from shapely.geometry import Polygon
 
-from hero.planops.draw import add_typed_wall, merge_collinear_wall, split_wall
+from hero.planops.draw import (
+    add_dimension,
+    add_rectangle,
+    add_typed_wall,
+    merge_collinear_wall,
+    place_opening_at_distance,
+    split_wall,
+    wall_from_location,
+)
 from hero.planops.geom import point_in_ring, ring_area
 from hero.planops.grips import (
     move_selection,
@@ -200,13 +208,36 @@ def test_shared_vector(raw: dict) -> None:
     elif op == "snapRotation":
         snapped = snap_rotation(vector.input.rotationDeg, bool(vector.input.free))
         assert snapped == vector.expect.rotationDeg
-    elif op in _GRIP_OPS:
-        _assert_grip(vector, _GRIP_OPS[op])
+    elif op == "wallFromLocation":
+        line = wall_from_location(vector.input["from"], vector.input.to, vector.input.thickness,
+            vector.input.location)
+        expected = vector.expect.centerline
+        for end in ("a", "b"):
+            gap = math.hypot(line[end]["x"] - expected[end].x, line[end]["y"] - expected[end].y)
+            assert gap <= expected.tolerance
+    elif op in _PLAN_OPS:
+        _assert_plan_op(vector, _PLAN_OPS[op])
     else:
         raise AssertionError(f"unknown op {op}")
 
 
-_GRIP_OPS = {
+_PLAN_OPS = {
+    "addRectangle": lambda v: add_rectangle(
+        v.input.plan, v.input.levelId, v.input["from"], v.input.to, v.input.thickness, v.input.mode
+    ),
+    "placeOpeningAtDistance": lambda v: place_opening_at_distance(
+        v.input.plan,
+        v.input.levelId,
+        v.input.wallId,
+        v.input.openingKind,
+        v.input.end,
+        v.input.distance,
+        v.input.width,
+        v.input.swingSide,
+    ),
+    "addDimension": lambda v: add_dimension(
+        v.input.plan, v.input.levelId, [dict(item) for item in v.input.refs], v.input.offset
+    ),
     "setWallThicknessFromFace": lambda v: set_wall_thickness_from_face(
         v.input.plan, v.input.levelId, v.input.wallId, v.input.thickness, v.input.keep
     ),
@@ -228,7 +259,7 @@ _GRIP_OPS = {
 }
 
 
-def _assert_grip(vector, run) -> None:
+def _assert_plan_op(vector, run) -> None:
     before = json.dumps(vector.input.plan, sort_keys=True)
     expect = vector.expect
     if expect.get("error", False):
@@ -273,6 +304,10 @@ def _assert_grip(vector, run) -> None:
         assert abs(fixture.x - fixture_expect.x) <= fixture_expect.tolerance
         assert abs(fixture.y - fixture_expect.y) <= fixture_expect.tolerance
         assert abs(fixture.rotationDeg - fixture_expect.rotationDeg) <= fixture_expect.tolerance
+    dimension_expect = expect.get("dimension")
+    if dimension_expect is not None:
+        found = next(item for item in level.dimensions if item.id == dimension_expect.id)
+        assert json.dumps(found, sort_keys=True) == json.dumps(dimension_expect, sort_keys=True)
     _assert_moved(vector, nxt)
 
 
@@ -382,10 +417,15 @@ def _reference_angle(vector) -> float | None:
 
 def _assert_moved(vector, plan) -> None:
     verts = _vertices(plan, vector.input.levelId)
+    tolerance = vector.expect.get("vertexTolerance")
     for vertex_id, point in (vector.expect.get("vertices") or {}).items():
         vertex = verts[vertex_id]
-        assert vertex.x == point.x
-        assert vertex.y == point.y
+        if tolerance is None:
+            assert vertex.x == point.x
+            assert vertex.y == point.y
+        else:
+            assert abs(vertex.x - point.x) <= tolerance
+            assert abs(vertex.y - point.y) <= tolerance
     base = _reference_angle(vector)
     if base is None:
         return

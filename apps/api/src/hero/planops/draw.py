@@ -6,8 +6,9 @@ import copy
 import math
 from typing import Any
 
-from hero.planops.geom import dist, joint_angle_deg, sub, unit
-from hero.planops.model import Obj
+from hero.planops.geom import add, dist, joint_angle_deg, left, mul, sub, unit
+from hero.planops.model import Obj, wrap
+from hero.planops.ops import set_opening
 from hero.planops.tolerances import join_snap_m, ortho_deg
 
 
@@ -230,4 +231,127 @@ def merge_collinear_wall(plan: Any, level_id: str, wall_id: str) -> Any:
     ]
     if shared not in still:
         level.vertices = [vertex for vertex in level.vertices if vertex.id != shared]
+    return nxt
+
+
+def _xy(point: Any) -> dict[str, float]:
+    return {"x": point["x"], "y": point["y"]}
+
+
+def wall_from_location(p: Any, q: Any, thickness: float, location: str) -> dict[str, Any]:
+    """Centerline of a wall whose location line (centre, left face, or right face) runs p to q."""
+    direction = unit(sub(q, p))
+    if location == "center" or (direction["x"] == 0 and direction["y"] == 0):
+        return {"a": _xy(p), "b": _xy(q)}
+    shift = mul(left(direction), -thickness / 2 if location == "left" else thickness / 2)
+    return {"a": add(p, shift), "b": add(q, shift)}
+
+
+def add_rectangle(plan: Any, level_id: str, c1: Any, c2: Any, thickness: float,
+    mode: str) -> Any:
+    if not (thickness > 0) or thickness > 1.5:
+        raise ValueError("Wall thickness must be greater than 0 and at most 1.5 m")
+    grow = thickness / 2 if mode == "interior" else 0
+    min_x = min(c1["x"], c2["x"]) - grow
+    min_y = min(c1["y"], c2["y"]) - grow
+    max_x = max(c1["x"], c2["x"]) + grow
+    max_y = max(c1["y"], c2["y"]) + grow
+    if not (max_x - min_x > thickness) or not (max_y - min_y > thickness):
+        raise ValueError("The rectangle is smaller than its walls")
+    nxt = _clone(plan)
+    level = _level(nxt, _in_level(nxt, level_id))
+    corners = [
+        Obj({"x": min_x, "y": min_y}),
+        Obj({"x": max_x, "y": min_y}),
+        Obj({"x": max_x, "y": max_y}),
+        Obj({"x": min_x, "y": max_y}),
+    ]
+    ids = [_nearest(level, corner, join_snap_m) or _push(level, corner) for corner in corners]
+    for index, a in enumerate(ids):
+        b = ids[(index + 1) % len(ids)]
+        if any({wall.a, wall.b} == {a, b} for wall in level.walls):
+            continue
+        level.walls.append(
+            Obj({"id": _next_id(level, "w"), "a": a, "b": b, "thickness": thickness,
+                "kind": "exterior", "confidence": 1})
+        )
+    seeded = any(
+        min_x < room.seed.x < max_x and min_y < room.seed.y < max_y for room in level.rooms
+    )
+    if not seeded:
+        center = Obj({"x": (min_x + max_x) / 2, "y": (min_y + max_y) / 2})
+        level.rooms.append(
+            Obj({"id": _next_id(level, "r"), "name": "Room", "number": "", "seed": center})
+        )
+    return nxt
+
+
+def inner_corner_offset(level: Any, wall_id: str, vertex_id: str) -> float:
+    half = 0.0
+    for wall in level.walls:
+        if wall.id != wall_id and vertex_id in (wall.a, wall.b):
+            half = max(half, wall.thickness / 2)
+    return half
+
+
+def place_opening_at_distance(plan: Any, level_id: str, wall_id: str, kind: str, end: str,
+    distance: float, width: float, swing_side: str = "positive") -> Any:
+    if not (distance >= 0) or not math.isfinite(distance):
+        raise ValueError("The distance must be zero or more")
+    if not (width > 0):
+        raise ValueError("The opening width must be greater than 0")
+    level = _level(plan, level_id)
+    wall = next((item for item in level.walls if item.id == wall_id), None)
+    if wall is None:
+        raise ValueError(f"Unknown wall {wall_id}")
+    length = dist(_vertex(level, wall.a), _vertex(level, wall.b))
+    start_corner = inner_corner_offset(level, wall_id, wall.a)
+    end_corner = length - inner_corner_offset(level, wall_id, wall.b)
+    if end == "a":
+        center = start_corner + distance + width / 2
+    else:
+        center = end_corner - distance - width / 2
+    if center - width / 2 < start_corner - 1e-9 or center + width / 2 > end_corner + 1e-9:
+        raise ValueError("The opening does not fit between the inner corners")
+    nxt = _clone(plan)
+    target = _level(nxt, level_id)
+    opening_id = _next_id(target, "o")
+    target.openings.append(
+        Obj(
+            {
+                "id": opening_id,
+                "wall": wall_id,
+                "kind": kind,
+                "offset": center / length,
+                "width": width,
+                "sill": 0.9 if kind == "window" else 0,
+                "head": 2.1,
+                "swing": "none" if kind == "passage" else "left",
+                "swingSide": swing_side,
+                "confidence": 1,
+            }
+        )
+    )
+    return set_opening(nxt, level_id, opening_id, {})
+
+
+def add_dimension(plan: Any, level_id: str, refs: list[Any], offset: float) -> Any:
+    if len(refs) < 2:
+        raise ValueError("A dimension needs at least two points")
+    if not math.isfinite(offset):
+        raise ValueError("The dimension offset must be a number")
+    nxt = _clone(plan)
+    level = _level(nxt, level_id)
+    for ref in refs:
+        group = level.vertices if ref["type"] == "vertex" else level.openings
+        if not any(item.id == ref["id"] for item in group):
+            raise ValueError(f"Unknown {ref['type']} {ref['id']}")
+    segments = []
+    for a, b in zip(refs, refs[1:], strict=False):
+        if dict(a) == dict(b):
+            raise ValueError("A dimension segment needs two different points")
+        segments.append(wrap({"a": dict(a), "b": dict(b)}))
+    level.dimensions.append(
+        Obj({"id": _next_id(level, "d"), "auto": False, "offset": offset, "segments": segments})
+    )
     return nxt

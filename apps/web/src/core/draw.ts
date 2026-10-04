@@ -1,6 +1,7 @@
-import { dist, jointAngleDeg, sub, unit } from "./geom.ts"
+import { add, dist, jointAngleDeg, left, mul, sub, unit } from "./geom.ts"
 import type {
   Column,
+  Dimension,
   Fixture,
   Level,
   Opening,
@@ -11,7 +12,7 @@ import type {
   Wall,
 } from "./plan-types.ts"
 import { editorTolerances } from "./tolerances.ts"
-import { setOpening, type OpeningPatch } from "./ops.ts"
+import { setOpening, type DimensionRef, type OpeningPatch } from "./ops.ts"
 
 export type Clipboard = {
   vertices: { id: string; x: number; y: number }[]
@@ -95,6 +96,157 @@ export function addTypedWall(
     kind: "exterior",
     confidence: 1,
   })
+  return next
+}
+
+/** The point `lengthM` from `start` at `angleDeg`, exact at multiples of 90°. */
+export function pointAtAngle(start: Point, lengthM: number, angleDeg: number): Point {
+  const direction = directionFromAngle(angleDeg)
+  return { x: start.x + direction.x * lengthM, y: start.y + direction.y * lengthM }
+}
+
+/** A wall from an existing vertex to a point, joining a vertex already within `join_snap_m` of it. */
+export function addWallFrom(plan: Plan, levelId: string, fromId: string, end: Point, thickness: number): { plan: Plan; endId: string } {
+  if (!(thickness > 0) || thickness > 1.5) {
+    throw new Error("Wall thickness must be greater than 0 and at most 1.5 m")
+  }
+  const next = ensureDrawingLevel(structuredClone(plan))
+  const level = levelOf(next, inLevel(next, levelId))
+  vertexOf(level, fromId)
+  const endId = nearestVertex(level, end, editorTolerances.join_snap_m) ?? pushVertex(level, end)
+  if (endId === fromId) {
+    throw new Error("A wall needs two different vertices")
+  }
+  level.walls.push({ id: nextId(level, "w"), a: fromId, b: endId, thickness, kind: "exterior", confidence: 1 })
+  return { plan: next, endId }
+}
+
+export type WallLocation = "center" | "left" | "right"
+
+export type RectangleMode = "interior" | "centerline"
+
+/** Centerline of a wall whose `location` line (centre, left face, or right face) runs from p to q. */
+export function wallFromLocation(p: Point, q: Point, thickness: number, location: WallLocation): { a: Point; b: Point } {
+  const direction = unit(sub(q, p))
+  if (location === "center" || (direction.x === 0 && direction.y === 0)) {
+    return { a: { x: p.x, y: p.y }, b: { x: q.x, y: q.y } }
+  }
+  const shift = mul(left(direction), location === "left" ? -thickness / 2 : thickness / 2)
+  return { a: add(p, shift), b: add(q, shift) }
+}
+
+/** Four walls counter-clockwise around the box c1, c2, and a room seed at its centre. */
+export function addRectangle(plan: Plan, levelId: string, c1: Point, c2: Point, thickness: number, mode: RectangleMode): Plan {
+  if (!(thickness > 0) || thickness > 1.5) {
+    throw new Error("Wall thickness must be greater than 0 and at most 1.5 m")
+  }
+  const grow = mode === "interior" ? thickness / 2 : 0
+  const minX = Math.min(c1.x, c2.x) - grow
+  const minY = Math.min(c1.y, c2.y) - grow
+  const maxX = Math.max(c1.x, c2.x) + grow
+  const maxY = Math.max(c1.y, c2.y) + grow
+  if (!(maxX - minX > thickness) || !(maxY - minY > thickness)) {
+    throw new Error("The rectangle is smaller than its walls")
+  }
+  const next = ensureDrawingLevel(structuredClone(plan))
+  const level = levelOf(next, inLevel(next, levelId))
+  const corners = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ]
+  const ids = corners.map((corner) => nearestVertex(level, corner, editorTolerances.join_snap_m) ?? pushVertex(level, corner))
+  for (let index = 0; index < ids.length; index += 1) {
+    const a = ids[index] as string
+    const b = ids[(index + 1) % ids.length] as string
+    if (!level.walls.some((wall) => (wall.a === a && wall.b === b) || (wall.a === b && wall.b === a))) {
+      level.walls.push({ id: nextId(level, "w"), a, b, thickness, kind: "exterior", confidence: 1 })
+    }
+  }
+  const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+  const seeded = level.rooms.some((room) => room.seed.x > minX && room.seed.x < maxX && room.seed.y > minY && room.seed.y < maxY)
+  if (!seeded) {
+    level.rooms.push({ id: nextId(level, "r"), name: "Room", number: "", seed: center })
+  }
+  return next
+}
+
+/** Distance along the wall from an end vertex to the inner corner made by the thickest other wall there. */
+export function innerCornerOffset(level: Level, wallId: string, vertexId: string): number {
+  let half = 0
+  for (const wall of level.walls) {
+    if (wall.id !== wallId && (wall.a === vertexId || wall.b === vertexId)) {
+      half = Math.max(half, wall.thickness / 2)
+    }
+  }
+  return half
+}
+
+/** Place an opening whose near edge is `distance` from the inner corner at wall end `end`. */
+export function placeOpeningAtDistance(
+  plan: Plan,
+  levelId: string,
+  wallId: string,
+  kind: Opening["kind"],
+  end: "a" | "b",
+  distance: number,
+  width: number,
+  swingSide: Opening["swingSide"] = "positive",
+): Plan {
+  if (!(distance >= 0) || !Number.isFinite(distance)) {
+    throw new Error("The distance must be zero or more")
+  }
+  if (!(width > 0)) {
+    throw new Error("The opening width must be greater than 0")
+  }
+  const level = levelOf(plan, levelId)
+  const wall = level.walls.find((item) => item.id === wallId)
+  if (!wall) {
+    throw new Error(`Unknown wall ${wallId}`)
+  }
+  const length = dist(vertexOf(level, wall.a), vertexOf(level, wall.b))
+  const startCorner = innerCornerOffset(level, wallId, wall.a)
+  const endCorner = length - innerCornerOffset(level, wallId, wall.b)
+  const center = end === "a" ? startCorner + distance + width / 2 : endCorner - distance - width / 2
+  if (center - width / 2 < startCorner - 1e-9 || center + width / 2 > endCorner + 1e-9) {
+    throw new Error("The opening does not fit between the inner corners")
+  }
+  const added = addOpeningOnWall(plan, levelId, wallId, kind, center / length, width)
+  const openings = levelOf(added, levelId).openings
+  const opening = openings[openings.length - 1]
+  if (opening) {
+    opening.swingSide = swingSide
+  }
+  return added
+}
+
+/** A manual dimension chain through two or more references. */
+export function addDimension(plan: Plan, levelId: string, refs: readonly DimensionRef[], offset: number): Plan {
+  if (refs.length < 2) {
+    throw new Error("A dimension needs at least two points")
+  }
+  if (!Number.isFinite(offset)) {
+    throw new Error("The dimension offset must be a number")
+  }
+  const next = structuredClone(plan)
+  const level = levelOf(next, levelId)
+  for (const ref of refs) {
+    const known = ref.type === "vertex" ? level.vertices.some((item) => item.id === ref.id) : level.openings.some((item) => item.id === ref.id)
+    if (!known) {
+      throw new Error(`Unknown ${ref.type} ${ref.id}`)
+    }
+  }
+  const segments: Dimension["segments"] = []
+  for (let index = 0; index < refs.length - 1; index += 1) {
+    const a = refs[index] as DimensionRef
+    const b = refs[index + 1] as DimensionRef
+    if (JSON.stringify(a) === JSON.stringify(b)) {
+      throw new Error("A dimension segment needs two different points")
+    }
+    segments.push({ a: { ...a }, b: { ...b } })
+  }
+  level.dimensions.push({ id: nextId(level, "d"), auto: false, offset, segments })
   return next
 }
 
@@ -271,7 +423,7 @@ export function addTextLabel(plan: Plan, levelId: string, point: Point, text = "
   return next
 }
 
-export function addFixture(plan: Plan, levelId: string, symbol: Fixture["symbol"], point: Point): Plan {
+export function addFixture(plan: Plan, levelId: string, symbol: Fixture["symbol"], point: Point, rotationDeg = 0): Plan {
   const next = structuredClone(plan)
   const level = levelOf(next, levelId)
   const size = symbolSize(symbol)
@@ -280,7 +432,7 @@ export function addFixture(plan: Plan, levelId: string, symbol: Fixture["symbol"
     symbol,
     x: point.x,
     y: point.y,
-    rotationDeg: 0,
+    rotationDeg: (((rotationDeg % 360) + 360) % 360),
     width: size.width,
     depth: size.depth,
     confidence: 1,

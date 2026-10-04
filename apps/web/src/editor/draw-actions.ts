@@ -1,21 +1,35 @@
 import {
   addColumn,
+  addDimension,
   addFixture,
-  addOpeningOnWall,
+  addRectangle,
   addRoomSeed,
   addSeparator,
   addStair,
   addTextLabel,
-  addTypedWall,
   addVertex,
+  addWallFrom,
+  placeOpeningAtDistance,
   splitWall,
+  wallFromLocation,
+  type RectangleMode,
+  type WallLocation,
 } from "@/core/draw.ts"
-import type { Fixture, Plan, Point } from "@/core/plan-types.ts"
-import { ringCentroid } from "@/core/geom.ts"
+import { dist, lineIntersect, ringCentroid, sub } from "@/core/geom.ts"
+import type { DimensionRef } from "@/core/ops.ts"
+import { moveVertex } from "@/core/ops.ts"
+import type { Fixture, Opening, Plan, Point } from "@/core/plan-types.ts"
+import { editorTolerances } from "@/core/tolerances.ts"
 
+/** A wall chain in progress. Face points are the clicked location line; vertices sit on the centerline. */
 export type WallChain = {
   anchorId: string
   startId: string
+  anchorFace: Point
+  startFace: Point
+  first: { from: Point; to: Point } | null
+  previous: { from: Point; to: Point } | null
+  count: number
 }
 
 function targetLevel(plan: Plan, levelId?: string): string {
@@ -27,47 +41,93 @@ function targetLevel(plan: Plan, levelId?: string): string {
 
 export function startWall(plan: Plan, point: Point, levelId?: string): { plan: Plan; chain: WallChain } {
   const added = addVertex(plan, targetLevel(plan, levelId), point)
-  return { plan: added.plan, chain: { anchorId: added.id, startId: added.id } }
+  const level = added.plan.levels.find((item) => item.id === targetLevel(added.plan, levelId))
+  const vertex = level?.vertices.find((item) => item.id === added.id)
+  const face = vertex ? { x: vertex.x, y: vertex.y } : point
+  return {
+    plan: added.plan,
+    chain: { anchorId: added.id, startId: added.id, anchorFace: face, startFace: face, first: null, previous: null, count: 0 },
+  }
 }
 
-export function extendWall(
+function corner(previous: { from: Point; to: Point }, next: { from: Point; to: Point }, thickness: number, location: WallLocation): Point | null {
+  const before = wallFromLocation(previous.from, previous.to, thickness, location)
+  const after = wallFromLocation(next.from, next.to, thickness, location)
+  return lineIntersect(before.a, sub(before.b, before.a), after.a, sub(after.b, after.a))
+}
+
+/** Add the next wall of the chain to the location-line point `face`. Closing on the start face ends the chain. */
+export function extendWallTo(
   plan: Plan,
   chain: WallChain,
-  lengthM: number,
-  angleDeg: number,
+  face: Point,
+  thickness: number,
+  location: WallLocation,
   levelId?: string,
 ): { plan: Plan; chain: WallChain | null } {
   const id = targetLevel(plan, levelId)
-  const level = plan.levels.find((item) => item.id === id)
-  const start = level?.vertices.find((vertex) => vertex.id === chain.anchorId)
-  if (!level || !start) {
+  if (dist(chain.anchorFace, face) <= 0.001) {
+    throw new Error("The wall needs a length")
+  }
+  const segment = { from: chain.anchorFace, to: face }
+  const closing = chain.count >= 2 && dist(face, chain.startFace) <= editorTolerances.join_snap_m
+  let next = plan
+  if (location !== "center") {
+    const line = wallFromLocation(segment.from, segment.to, thickness, location)
+    const anchorAt = chain.previous ? (corner(chain.previous, segment, thickness, location) ?? line.a) : line.a
+    next = moveVertex(next, id, chain.anchorId, anchorAt)
+    if (closing && chain.first) {
+      const closeAt = corner(segment, chain.first, thickness, location) ?? line.b
+      next = moveVertex(next, id, chain.startId, closeAt)
+    }
+  }
+  const level = next.levels.find((item) => item.id === id)
+  const anchor = level?.vertices.find((vertex) => vertex.id === chain.anchorId)
+  if (!level || !anchor) {
     throw new Error("Click a start point first")
   }
-  const next = addTypedWall(plan, level.id, start, lengthM, angleDeg)
-  const drawn = next.levels.find((item) => item.id === level.id)
-  const wall = drawn?.walls[drawn.walls.length - 1]
-  const endId = wall?.b
-  if (!drawn || !endId) {
-    throw new Error("The wall was not created")
+  const end = location === "center" ? face : wallFromLocation(segment.from, segment.to, thickness, location).b
+  const target = closing ? level.vertices.find((vertex) => vertex.id === chain.startId) : undefined
+  const drawn = addWallFrom(next, id, chain.anchorId, target ? { x: target.x, y: target.y } : end, thickness)
+  if (drawn.endId === chain.startId && chain.count >= 2) {
+    const ring = drawn.plan.levels.find((item) => item.id === id)?.vertices ?? []
+    const centroid = ringCentroid(ring)
+    const seeded = level.rooms.some((room) => room.seed.x === centroid.x && room.seed.y === centroid.y)
+    return { plan: seeded ? drawn.plan : addRoomSeed(drawn.plan, id, centroid, "Room", ""), chain: null }
   }
-  if (endId === chain.startId && drawn.walls.length >= 3) {
-    const centroid = ringCentroid(drawn.vertices)
-    const seeded = drawn.rooms.some((room) => room.seed.x === centroid.x && room.seed.y === centroid.y)
-      ? next
-      : addRoomSeed(next, drawn.id, centroid, "Room", "")
-    return { plan: seeded, chain: null }
+  return {
+    plan: drawn.plan,
+    chain: {
+      anchorId: drawn.endId,
+      startId: chain.startId,
+      anchorFace: face,
+      startFace: chain.startFace,
+      first: chain.first ?? segment,
+      previous: segment,
+      count: chain.count + 1,
+    },
   }
-  return { plan: next, chain: { anchorId: endId, startId: chain.startId } }
 }
 
-export function placeOpening(
+export function placeRectangle(plan: Plan, c1: Point, c2: Point, thickness: number, mode: RectangleMode, levelId?: string): Plan {
+  return addRectangle(plan, targetLevel(plan, levelId), c1, c2, thickness, mode)
+}
+
+export function placeOpeningAt(
   plan: Plan,
   wallId: string,
-  kind: "door" | "window" | "passage",
-  offset: number,
+  kind: Opening["kind"],
+  end: "a" | "b",
+  distance: number,
+  width: number,
+  swingSide: Opening["swingSide"],
   levelId?: string,
 ): Plan {
-  return addOpeningOnWall(plan, targetLevel(plan, levelId), wallId, kind, offset)
+  return placeOpeningAtDistance(plan, targetLevel(plan, levelId), wallId, kind, end, distance, width, swingSide)
+}
+
+export function placeDimension(plan: Plan, refs: DimensionRef[], offset: number, levelId?: string): Plan {
+  return addDimension(plan, targetLevel(plan, levelId), refs, offset)
 }
 
 export function placeColumn(plan: Plan, point: Point, levelId?: string): Plan {
@@ -82,8 +142,8 @@ export function placeText(plan: Plan, point: Point, levelId?: string): Plan {
   return addTextLabel(plan, targetLevel(plan, levelId), point)
 }
 
-export function placeFixture(plan: Plan, symbol: Fixture["symbol"], point: Point, levelId?: string): Plan {
-  return addFixture(plan, targetLevel(plan, levelId), symbol, point)
+export function placeFixture(plan: Plan, symbol: Fixture["symbol"], point: Point, rotationDeg = 0, levelId?: string): Plan {
+  return addFixture(plan, targetLevel(plan, levelId), symbol, point, rotationDeg)
 }
 
 export function placeSeparator(plan: Plan, a: Point, b: Point, levelId?: string): Plan {

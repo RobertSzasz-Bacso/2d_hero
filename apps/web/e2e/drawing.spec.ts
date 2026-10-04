@@ -21,10 +21,10 @@ test("draw a rectangle, a door, a named room, and a toilet", async ({ page, requ
 
   await page.getByTestId("tool-wall").click()
   await clickStage(page, 200, 400)
-  await typedWall(page, "5", "0")
-  await typedWall(page, "4", "90")
-  await typedWall(page, "5", "180")
-  await typedWall(page, "4", "270")
+  await typedWall(page, "500", "0")
+  await typedWall(page, "400", "90")
+  await typedWall(page, "500", "180")
+  await typedWall(page, "400", "270")
 
   await expect(page.getByTestId("room-area")).toHaveText("18.2 m²")
 
@@ -83,9 +83,13 @@ test("draw a rectangle, a door, a named room, and a toilet", async ({ page, requ
 })
 
 async function typedWall(page: Page, length: string, angle: string) {
-  await page.getByTestId("wall-length").fill(length)
-  await page.getByTestId("wall-angle").fill(angle)
-  await page.getByTestId("wall-apply").click()
+  await page.keyboard.type(length)
+  await expect(page.getByTestId("cursor-input-length")).toHaveValue(length)
+  await page.keyboard.press("Tab")
+  await page.keyboard.type(angle)
+  await expect(page.getByTestId("cursor-input-angle")).toHaveValue(angle)
+  await page.keyboard.press("Enter")
+  await expect(page.getByTestId("cursor-input")).toHaveCount(0)
 }
 
 async function clickStage(page: Page, x: number, y: number) {
