@@ -31,7 +31,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 12 — Openings, columns, stairs — `done`
 - [x] Phase 13 — Fixtures and furniture — `done`
 - [x] Phase 14 — IFC import — `done`
-- [ ] Phase 15 — AI assistant — `not started`
+- [x] Phase 15 — AI assistant — `done`
 - [ ] Phase 16 — Hardening and release — `not started`
 - [ ] Phase 17 — Optional machine-learning detectors — `not started`
 
@@ -678,7 +678,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-14
 
 ## Phase 15 — AI assistant
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 14 done.
 

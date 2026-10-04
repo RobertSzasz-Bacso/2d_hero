@@ -12,7 +12,7 @@ export default function PropertiesPanel() {
   const item = selection.length === 1 ? selection[0] : undefined
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-auto border-l border-slate-200 bg-slate-50 p-3 text-sm">
+    <div className="flex flex-col gap-3 p-3 text-sm">
       <h2 className="font-medium">Properties</h2>
       {!item || !plan || !level ? (
         <p className="text-slate-500">{selection.length > 1 ? `${selection.length} selected` : "Nothing selected"}</p>
@@ -23,7 +23,7 @@ export default function PropertiesPanel() {
       {item && plan && level && item.kind === "fixture" ? <FixtureFields plan={plan} level={level} id={item.id} /> : null}
       {item && plan && level && item.kind === "text" ? <TextFields plan={plan} level={level} id={item.id} /> : null}
       {item && plan && level && item.kind === "room" ? <RoomFields plan={plan} level={level} id={item.id} /> : null}
-    </aside>
+    </div>
   )
 }
 

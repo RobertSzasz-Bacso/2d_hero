@@ -35,7 +35,7 @@ foreach ($port in 8091, 5191) {
 
 $sessionFile = Join-Path $tmp "session.token"
 $api = Start-Process -FilePath $uv -ArgumentList @(
-  "run", "hero", "--no-browser", "--port", "8091",
+  "run", "hero", "--no-browser", "--fake-agent", "--port", "8091",
   "--projects-dir", (Join-Path $tmp "projects"),
   "--config-dir", (Join-Path $tmp "config"),
   "--session-file", $sessionFile

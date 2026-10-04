@@ -19,6 +19,8 @@ from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 
+from hero.ai.agent import CursorPlanAgent, PlanAgent
+from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.dialogs import ask_open_file
 from hero.jobs import JobBusy, cancel_job, job_snapshot, shutdown_pool, source_file, start_import
 from hero.keystore import cursor_key_is_set, delete_cursor_key, set_cursor_key
@@ -60,6 +62,12 @@ class ImportJobBody(BaseModel):
     upAxis: str = "auto"
 
 
+class ProposeBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    instruction: str
+
+
 def create_app(
     token: str,
     *,
@@ -68,6 +76,7 @@ def create_app(
     session_file: Path | None = None,
     dist_dir: Path | None = None,
     open_file: Callable[[], str | None] | None = None,
+    agent: PlanAgent | None = None,
 ) -> FastAPI:
     """Build the API. Session files are written only when paths are passed in."""
 
@@ -94,6 +103,7 @@ def create_app(
         return SettingsStore(resolved_config)
 
     chooser = open_file if open_file is not None else ask_open_file
+    plan_agent = agent if agent is not None else CursorPlanAgent()
 
     app = FastAPI(title="2D Hero", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(LocalSecurityMiddleware, token=token)
@@ -348,6 +358,21 @@ def create_app(
         if points.is_file():
             return FileResponse(points, media_type="application/octet-stream")
         return JSONResponse({"detail": "Preview is not ready."}, status_code=404)
+
+    @app.post("/api/projects/{project_id}/ai/propose")
+    def post_proposal(project_id: str, body: ProposeBody) -> JSONResponse:
+        result = propose_edit(project_store(), project_id, body.instruction, plan_agent)
+        return JSONResponse(result.body, status_code=result.status)
+
+    @app.post("/api/projects/{project_id}/ai/accept")
+    def post_accept(project_id: str) -> JSONResponse:
+        result = accept_proposal(project_store(), project_id)
+        return JSONResponse(result.body, status_code=result.status)
+
+    @app.post("/api/projects/{project_id}/ai/reject")
+    def post_reject(project_id: str) -> JSONResponse:
+        result = reject_proposal(project_store(), project_id)
+        return JSONResponse(result.body, status_code=result.status)
 
     static_dir = web_dist() if dist_dir is None else dist_dir
     if static_dir.is_dir():

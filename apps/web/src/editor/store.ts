@@ -88,6 +88,9 @@ type EditorState = {
   setUnderlayOpacity: (opacity: number) => void
   setShow3d: (show: boolean) => void
   setUnderlayBounds: (bounds: Bounds | null) => void
+  aiPreview: Plan | null
+  setAiPreview: (plan: Plan | null) => void
+  acceptServerPlan: (plan: Plan) => void
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -133,6 +136,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   underlayOpacity: 0.55,
   show3d: false,
   underlayBounds: null,
+  aiPreview: null,
   load: (projectId, plan) => {
     if (saveTimer) {
       clearTimeout(saveTimer)
@@ -151,6 +155,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       dragging: false,
       activeLevelId: plan.levels[0]?.id ?? "",
       underlayBounds: null,
+      aiPreview: null,
     })
     get().fit()
   },
@@ -285,6 +290,27 @@ export const useEditor = create<EditorState>((set, get) => ({
   setUnderlayVisible: (underlayVisible) => set({ underlayVisible }),
   setUnderlayOpacity: (underlayOpacity) => set({ underlayOpacity }),
   setShow3d: (show3d) => set({ show3d }),
+  setAiPreview: (aiPreview) => set({ aiPreview }),
+  acceptServerPlan: (saved) => {
+    const history = get().history
+    if (!history) {
+      return
+    }
+    const revision = history.plan.revision
+    history.commitPlan({ ...saved, revision })
+    history.setRevision(saved.revision)
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    pending = false
+    set((state) => ({
+      aiPreview: null,
+      tick: state.tick + 1,
+      saveStatus: "Saved",
+      saveError: "",
+    }))
+  },
   setUnderlayBounds: (underlayBounds) => {
     set({ underlayBounds })
     const level = get().history?.plan.levels.find((item) => item.id === get().activeLevelId)

@@ -7,10 +7,17 @@ KEYRING_SERVICE = "2D Hero"
 KEYRING_USERNAME = "cursor_api_key"
 
 
+def get_cursor_key() -> str | None:
+    """The stored key, or None. Callers must not log the return value."""
+    stored = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
+    if not stored:
+        return None
+    return stored
+
+
 def cursor_key_is_set() -> bool:
     """True when keyring holds a non-empty Cursor key."""
-    stored = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
-    return bool(stored)
+    return get_cursor_key() is not None
 
 
 def set_cursor_key(key: str) -> None:

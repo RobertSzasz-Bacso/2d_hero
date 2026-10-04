@@ -125,22 +125,33 @@ The app starts a local stdio MCP server (`python -m hero.mcp`) that wraps `plano
 
 Tools validate against the schema and return errors as tool results. They must not write `plan.json`.
 
-The agent is a **local** Cursor SDK agent whose cwd is the project folder. Verify every SDK field against the installed `cursor-sdk` and the official docs. As a guide, the shape that was current when this file was written is:
+The agent is a **local** Cursor SDK agent whose cwd is the project folder. `cursor-sdk` 1.0.35 puts inline MCP servers on `AgentOptions.mcp_servers`, not on the keyword arguments of `Agent.create`. The model is `composer-2.5`. `tools` is `read` and `mcp`, so the built-in edit tools are not offered. The API key is the `api_key` field. It is not an environment variable and it is not passed to the MCP process.
 
 ```python
-from cursor_sdk import Agent, LocalAgentOptions
+import sys
+
+from cursor_sdk import Agent, AgentOptions, LocalAgentOptions, StdioMcpServerConfig
 
 with Agent.create(
-    model="composer-2.5",
-    api_key=key,
-    local=LocalAgentOptions(cwd=project_dir),
+    AgentOptions(
+        model="composer-2.5",
+        api_key=key,
+        local=LocalAgentOptions(cwd=project_dir),
+        mcp_servers={
+            "hero": StdioMcpServerConfig(
+                command=sys.executable,
+                args=["-m", "hero.mcp", str(project_dir)],
+                cwd=project_dir,
+            )
+        },
+        tools=["read", "mcp"],
+    )
 ) as agent:
     run = agent.send(prompt)
-    text = run.text()
     result = run.wait()
 ```
 
-Pass the MCP server on that create or send call using the field the installed SDK actually has. If this snippet and the SDK disagree, follow the SDK and update this section.
+`mcp` 2.3 names the server class `MCPServer` (`mcp.server.mcpserver`). The old `FastMCP` import raises. The server reads the project directory from its first argument.
 
 The prompt tells the agent to change the plan only through tools, and points it at `review/underlay.png` and `review/plan.svg`. The proposal sent to the browser is the list of ops. The UI highlights the difference. Accept applies them through the same core operations as a mouse edit. Reject drops the list.
 

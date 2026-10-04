@@ -31,6 +31,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Serve without opening a browser. Used by scripts/dev.ps1.",
     )
+    parser.add_argument(
+        "--fake-agent",
+        action="store_true",
+        help="Use an in-memory key and a scripted agent. Browser tests only.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -42,6 +47,11 @@ def main(argv: list[str] | None = None) -> None:
     write_token(session_file, token)
     logger.info("Session token stored")
 
+    agent = None
+    if args.fake_agent:
+        from hero.ai.fake import e2e_agent
+
+        agent = e2e_agent()
     app = create_app(
         token=token,
         config_dir=config_dir,
@@ -49,6 +59,7 @@ def main(argv: list[str] | None = None) -> None:
         session_file=session_file,
         dist_dir=web_dist(),
         open_file=ask_open_file,
+        agent=agent,
     )
     port = _choose_port(args.port)
     if not web_dist().is_dir():

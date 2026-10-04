@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { Button } from "@/components/ui/button.tsx"
 import type { Level, Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
+import AssistantPanel from "./AssistantPanel.tsx"
 import ExportDialog from "./ExportDialog.tsx"
 import IssuesPanel from "./IssuesPanel.tsx"
 import PlanCanvas from "./PlanCanvas.tsx"
@@ -203,7 +204,12 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
         <Toolbar />
         <PlanCanvas />
         {show3d ? <View3D projectId={projectId} elevation={elevation} /> : null}
-        <PropertiesPanel />
+        <aside className="flex w-72 shrink-0 flex-col border-l border-slate-200 bg-slate-50">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <PropertiesPanel />
+          </div>
+          <AssistantPanel projectId={projectId} />
+        </aside>
         <IssuesPanel />
         <Shortcuts />
       </div>

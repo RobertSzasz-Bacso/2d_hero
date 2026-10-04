@@ -9,6 +9,7 @@ dependencies = [
     "keyring>=25.7.0",
     "laspy>=2.7.0",
     "lazrs>=0.8.2",
+    "mcp>=2.3.0",
     "networkx>=3.7",
     "numpy>=2.5.3",
     "open3d>=0.20.0",
@@ -28,6 +29,11 @@ dependencies = [
 
 [project.scripts]
 hero = "hero.__main__:main"
+
+[project.optional-dependencies]
+ai = [
+    "cursor-sdk>=1.0.35",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Group, Layer, Line, Stage } from "react-konva"
+import { changedWallIds } from "@/core/ai.ts"
 import { dimensionLabelPoint, roomLabelPoint } from "@/core/dimensions.ts"
 import { displayFromMetres, metresFromDisplay } from "@/core/draw.ts"
 import { footOnLine } from "@/core/geom.ts"
@@ -111,9 +112,13 @@ export default function PlanCanvas() {
 
   const projectId = useEditor((state) => state.projectId)
   const activeLevelId = useEditor((state) => state.activeLevelId)
+  const preview = useEditor((state) => state.aiPreview)
   const level = plan?.levels.find((item) => item.id === activeLevelId) ?? plan?.levels[0]
   const vertices = new Map(level?.vertices.map((vertex) => [vertex.id, vertex]) ?? [])
   const polygons = plan && level ? wallPolygons(plan, level.id) : []
+  const previewLevel = preview?.levels.find((item) => item.id === level?.id) ?? preview?.levels[0]
+  const previewPolygons = preview && previewLevel ? wallPolygons(preview, previewLevel.id) : []
+  const highlighted = plan && preview ? changedWallIds(plan, preview) : new Set<string>()
 
   function begin(kind: SessionKind, event: React.PointerEvent, id?: string) {
     const node = host.current
@@ -211,6 +216,18 @@ export default function PlanCanvas() {
                     strokeWidth={selected(selection, "wall", polygon.wallId) ? 0.04 : 0.015}
                   />
                 ))}
+                {previewPolygons.map((polygon) =>
+                  highlighted.has(polygon.wallId) ? (
+                    <Line
+                      key={`${polygon.wallId}-preview`}
+                      points={polygon.ring.flatMap((point) => [point.x, point.y])}
+                      closed
+                      fill="rgba(234,88,12,0.35)"
+                      stroke="#ea580c"
+                      strokeWidth={0.06}
+                    />
+                  ) : null,
+                )}
                 {level?.openings.map((opening) => {
                   const ends = openingEnds(level, opening)
                   const wall = level.walls.find((item) => item.id === opening.wall)
@@ -317,8 +334,10 @@ export default function PlanCanvas() {
               key={wall.id}
               type="button"
               data-wall-id={wall.id}
+              data-thickness={formatMetre(wall.thickness)}
               data-length={formatMetre(segmentLength(a, b))}
               data-angle={formatMetre(wallAngleDeg(a, b))}
+              data-ai-changed={highlighted.has(wall.id) ? "true" : "false"}
               data-selected={selected(selection, "wall", wall.id) ? "true" : "false"}
               className="pointer-events-auto absolute z-10 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-slate-700 bg-white"
               style={{ left: screen.x, top: screen.y }}
