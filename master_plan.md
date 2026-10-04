@@ -510,7 +510,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-10
 
 ## Phase 11 — Wall graph and rooms
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 10 done.
 

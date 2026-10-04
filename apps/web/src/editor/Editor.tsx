@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button.tsx"
 import type { Level, Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
 import ExportDialog from "./ExportDialog.tsx"
+import IssuesPanel from "./IssuesPanel.tsx"
 import PlanCanvas from "./PlanCanvas.tsx"
 import PropertiesPanel from "./PropertiesPanel.tsx"
 import Shortcuts from "./Shortcuts.tsx"
@@ -203,6 +204,7 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
         <PlanCanvas />
         {show3d ? <View3D projectId={projectId} elevation={elevation} /> : null}
         <PropertiesPanel />
+        <IssuesPanel />
         <Shortcuts />
       </div>
     </div>

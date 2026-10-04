@@ -51,9 +51,10 @@ def build_building(
     tilt_deg: float = 0.0,
     millimetres: bool = False,
     missing_face: bool = False,
+    open_gap: bool = False,
 ) -> Building:
     """Build the default apartment. The same seed always returns the same mesh."""
-    vertices, faces = _mesh(missing_face=missing_face)
+    vertices, faces = _mesh(missing_face=missing_face, open_gap=open_gap)
     generator = np.random.default_rng(seed)
     if noise_m > 0:
         vertices = vertices + generator.normal(0.0, noise_m, size=vertices.shape)
@@ -376,7 +377,7 @@ class _Mesh:
                 self.add_quad([outer3, outer2, inner2, inner3])
 
 
-def _mesh(*, missing_face: bool) -> tuple[np.ndarray, np.ndarray]:
+def _mesh(*, missing_face: bool, open_gap: bool = False) -> tuple[np.ndarray, np.ndarray]:
     mesh = _Mesh()
     walls = [
         (np.array([0.0, 0.0]), np.array([_WIDTH, 0.0]), _THICK),
@@ -395,6 +396,8 @@ def _mesh(*, missing_face: bool) -> tuple[np.ndarray, np.ndarray]:
             if index == 2:
                 center = 0.25 * _WIDTH
                 gap = (center - 0.6, center + 0.6, storey + 0.9, storey + 2.1)
+            if open_gap and index == 3 and storey == 0.0:
+                gap = (2.0, 3.0, storey, z1)
             mesh.add_vertical_wall(
                 start,
                 end,
