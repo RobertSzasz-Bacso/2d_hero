@@ -1,37 +1,71 @@
 # 2D Hero
 
-A local Windows app that turns a 3D scan or an IFC model into an editable metric floor plan and a scaled PDF.
+2D Hero turns a 3D scan or an IFC model into an editable metric floor plan and a scaled PDF. It runs on this Windows PC. The drawing stays in your Documents folder. Nothing is uploaded.
 
-The app is a local API plus a settings page. Projects are folders under `Documents\2D Hero`. Settings, except the Cursor key, live in `%APPDATA%\2D Hero`. The Cursor key is stored with Windows Credential Manager and is never written into a project or a response. Later phases add the editor and the PDF.
+## Install
 
-## Start the app
-
-Install [uv](https://docs.astral.sh/uv/) and Node.js, then:
+Install [uv](https://docs.astral.sh/uv/) and Node.js. In this folder:
 
 ```powershell
-powershell -File scripts\dev.ps1
+cd apps\web
+npm install
+npm run build
+cd ..\api
+uv sync
 ```
 
-Open http://127.0.0.1:5173. From `apps/api`, `uv run hero` serves a production build of `apps/web/dist` and opens the browser.
+Create a Desktop shortcut that starts the app and opens the browser:
 
-## Where the work is
+```powershell
+powershell -File scripts\install-shortcut.ps1
+```
 
-- [master_plan.md](master_plan.md) — the phases. Each one has a prompt to paste into a new Cursor chat.
-- [AGENTS.md](AGENTS.md) — how an agent must work in this repo.
-- [docs/](docs/) — the schema, the algorithms, the drawing rules, and the libraries. These override the prototype and `docs/research/`.
+Double-click **2D Hero** on the Desktop.
 
-Start with the first phase in `master_plan.md` whose status is `not started`. One phase per chat.
+To start it without a shortcut, from `apps\api`:
 
-## Your scan files
+```powershell
+uv run hero
+```
 
-Put real scans in `samples/user/` and describe them in a `manifest.json` copied from [samples/manifest.example.json](samples/manifest.example.json). That folder is not committed. See [samples/README.md](samples/README.md).
+That serves the built page and opens the browser. For day-to-day work on the code, `powershell -File scripts\dev.ps1` starts the API and the editor at http://127.0.0.1:5173.
 
-`samples/user/two_social_rooms_in_a_ruined_building.glb` is the owner's scan. It is not committed.
+## Save a key
 
-## Run a phase
+The editor works with no key. The assistant needs a Cursor key.
 
-1. Open a new chat in this repo.
-2. Copy that phase's prompt from `master_plan.md`.
-3. Paste it as the first message.
+On the home page, under **Settings**, type the key into **Cursor key** and press **Save key**. The key is stored in Windows Credential Manager. It is not written into the project. The page says **A Cursor key is saved.** You can press **Remove key** later.
 
-The phase ends with tests, a handoff note in `docs/handoff/`, and a commit on `main`. Nothing is pushed unless you ask.
+If the assistant panel says no key is saved, come back to this page and open Settings.
+
+## Import
+
+On the home page, **Import a scan**:
+
+1. Drop a file, or press **Browse** and choose one. OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, and IFC are the formats the app reads. A file it cannot read says: "This file could not be read. Export an OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, or IFC file and try again."
+2. Check **Guessed units** and **Guessed up axis**. Change them if the guess is wrong.
+3. Press **Start import**.
+
+A file over 200 MB is not copied. Link it with **Browse**. If that file is moved or deleted, the app says which path is missing so you can choose it again.
+
+**Cancel** stops the import between stages. The message is "Import was cancelled. The plan was not changed."
+
+## Edit
+
+When the import finishes, the plan opens. The tools are on the left: Select, Wall, Door, Window, and the others. Press `?` for the shortcut list. The plan saves on its own. **Ctrl+Z** undoes. **Fit** frames the drawing.
+
+## Export PDF
+
+Press **PDF** in the top bar. Choose 1:50, 1:100, or 1:200. If the plan does not fit, use the smaller scale or **Tile sheets**. Press **Download**.
+
+If that PDF is already open in another program, close it and export again. The message is "That PDF is open in another program. Close it, then export again."
+
+## Where projects live
+
+Each project is a folder in `Documents\2D Hero`. The recent list is on the home page.
+
+Title block, dimension units, and grid spacing are in `%APPDATA%\2D Hero`. The Cursor key is not in that folder.
+
+Tape measurements for your own scans go in `samples\user\manifest.json`. See [samples/README.md](samples/README.md). Those files are not part of the app's project folder.
+
+The build schedule for this repository is [master_plan.md](master_plan.md).

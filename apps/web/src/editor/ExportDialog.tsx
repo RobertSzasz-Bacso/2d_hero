@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button.tsx"
 import { compilePlan, type Scale } from "@/drawing/compile.ts"
+import { describePdfError, savePdf } from "@/pdf/save.ts"
 import { writePdf } from "@/pdf/write.ts"
 import type { TitleBlock } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
@@ -47,18 +48,13 @@ export default function ExportDialog() {
         titleDefaults: defaults,
       })
       const bytes = await writePdf(drawing)
-      const copy = new Uint8Array(bytes.byteLength)
-      copy.set(bytes)
-      const blob = new Blob([copy], { type: "application/pdf" })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `${plan?.project.name || "plan"}.pdf`
-      link.click()
-      URL.revokeObjectURL(url)
+      await savePdf(bytes, `${plan.project.name || "plan"}.pdf`)
       setOpen(false)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The PDF was not written.")
+      const message = describePdfError(caught)
+      if (message) {
+        setError(message)
+      }
     } finally {
       setBusy(false)
     }
@@ -114,7 +110,11 @@ export default function ExportDialog() {
                 </div>
               </div>
             )}
-            {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="mt-2 text-sm text-red-700" data-testid="export-error">
+                {error}
+              </p>
+            ) : null}
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="button" data-testid="export-download" disabled={busy || (!compiled.fits && !tile)} onClick={() => void download()}>

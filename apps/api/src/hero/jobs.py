@@ -1,6 +1,7 @@
 """One heavy import at a time, in a single worker process."""
 
 import json
+import logging
 import threading
 import time
 import uuid
@@ -8,7 +9,9 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from pathlib import Path
 
 from hero.atomic import atomic_write_text
+from hero.errors import CANCELLED, IMPORT_FAILED, UNREADABLE, UnreadableFile
 from hero.ingest.read import read_source
+from hero.ingest.scene import RawScene
 from hero.pipeline.cloud import write_cloud
 from hero.pipeline.normalize import normalize_scene
 from hero.pipeline.planwrite import write_detected_plan, write_imported_plan
@@ -16,6 +19,8 @@ from hero.pipeline.preview import write_preview
 from hero.pipeline.surfaces import detect_surfaces
 from hero.pipeline.underlay import write_underlays
 from hero.projects import LinkedFileMissing
+
+logger = logging.getLogger("hero.jobs")
 
 _lock = threading.Lock()
 _executor: ProcessPoolExecutor | None = None
@@ -37,7 +42,7 @@ def execute_import(project_dir: str, units: str, up_axis: str) -> dict[str, str]
         source = source_file(folder)
         if _stop(folder, "ingest", 10):
             return {"state": "cancelled"}
-        scene = read_source(source)
+        scene = _read_scene(source)
         if _stop(folder, "normalize", 30):
             return {"state": "cancelled"}
         result = normalize_scene(scene, units=units, up_axis=up_axis)
@@ -62,10 +67,30 @@ def execute_import(project_dir: str, units: str, up_axis: str) -> dict[str, str]
                 return {"state": "cancelled"}
             write_detected_plan(folder, result, surfaces, up_axis=up_axis)
         _write_state(folder, "done", "preview", 100, "")
-    except Exception as exc:
-        _write_state(folder, "error", "ingest", 0, str(exc))
-        return {"state": "error", "error": str(exc)}
+    except UnreadableFile:
+        _write_state(folder, "error", "ingest", 0, UNREADABLE)
+        return {"state": "error", "error": UNREADABLE}
+    except LinkedFileMissing as exc:
+        message = f"The linked file is missing: {exc.path}"
+        _write_state(folder, "error", "ingest", 0, message)
+        return {"state": "error", "error": message}
+    except Exception:
+        logger.exception("Import failed")
+        _write_state(folder, "error", "ingest", 0, IMPORT_FAILED)
+        return {"state": "error", "error": IMPORT_FAILED}
     return {"state": "done"}
+
+
+def _read_scene(source: Path) -> RawScene:
+    """Open a scan. An empty or corrupt file becomes a sentence, not a traceback."""
+    try:
+        scene = read_source(source)
+    except Exception as exc:
+        logger.exception("Could not read %s", source.name)
+        raise UnreadableFile() from exc
+    if not scene.has_geometry():
+        raise UnreadableFile()
+    return scene
 
 
 def source_file(folder: Path) -> Path:
@@ -174,5 +199,7 @@ def _wait_hold(folder: Path) -> None:
 
 
 def _write_state(folder: Path, state: str, stage: str, progress: int, error: str) -> None:
+    if state == "cancelled":
+        error = CANCELLED
     payload = {"state": state, "stage": stage, "progress": progress, "error": error}
     atomic_write_text(folder / "job.json", json.dumps(payload) + "\n")

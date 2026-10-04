@@ -22,6 +22,7 @@ from starlette.responses import FileResponse, JSONResponse
 from hero.ai.agent import CursorPlanAgent, PlanAgent
 from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.dialogs import ask_open_file
+from hero.errors import UNREADABLE, UnreadableFile
 from hero.jobs import JobBusy, cancel_job, job_snapshot, shutdown_pool, source_file, start_import
 from hero.keystore import cursor_key_is_set, delete_cursor_key, set_cursor_key
 from hero.paths import app_config_dir, default_projects_dir, web_dist
@@ -314,9 +315,12 @@ def create_app(
             return JSONResponse({"detail": "Source file is missing."}, status_code=400)
         try:
             return JSONResponse(guess_source(source))
+        except UnreadableFile:
+            logger.info("Unreadable source for project %s", project_id)
+            return JSONResponse({"detail": UNREADABLE}, status_code=400)
         except Exception:
             logger.exception("Could not guess units for %s", project_id)
-            return JSONResponse({"detail": "This file could not be read."}, status_code=400)
+            return JSONResponse({"detail": UNREADABLE}, status_code=400)
 
     @app.get("/api/projects/{project_id}/underlay/frames.json")
     def underlay_frames(project_id: str) -> JSONResponse:

@@ -18,6 +18,14 @@ class RawScene:
     mesh_vertices: np.ndarray | None = None
     mesh_faces: np.ndarray | None = None
 
+    def has_geometry(self) -> bool:
+        """True when the file yielded a mesh, points, or a point-cloud stream."""
+        if self.chunks is not None:
+            return True
+        if self.mesh_faces is not None and len(self.mesh_faces) > 0:
+            return True
+        return self.points is not None and len(self.points) > 0
+
     def iter_points(self) -> Iterator[np.ndarray]:
         if self.chunks is not None:
             yield from self.chunks()

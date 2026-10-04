@@ -93,10 +93,7 @@ export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) =>
       onOpen(projectId)
       return
     }
-    if (done === "cancelled") {
-      setProgress("Cancelled")
-      return
-    }
+    setProgress("")
     setError(done)
   }
 
@@ -163,7 +160,11 @@ export default function ImportPanel({ onOpen }: { onOpen: (projectId: string) =>
           Cancel
         </Button>
       ) : null}
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-red-700" data-testid="import-error">
+          {error}
+        </p>
+      ) : null}
     </section>
   )
 }
@@ -180,7 +181,7 @@ async function watch(jobId: string, setProgress: (text: string) => void): Promis
       return "done"
     }
     if (body.state === "cancelled") {
-      return "cancelled"
+      return body.error || "Import was cancelled. The plan was not changed."
     }
     if (body.state === "error") {
       return body.error || "The import failed."

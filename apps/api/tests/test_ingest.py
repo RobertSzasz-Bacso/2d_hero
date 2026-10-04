@@ -3,6 +3,7 @@
 import gc
 import inspect
 import json
+import time
 import tracemalloc
 from pathlib import Path
 from typing import Any, cast
@@ -108,9 +109,12 @@ def test_las_reader_is_a_generator_and_downsample_stays_small(tmp_path: Path) ->
     reader.close()
     gc.collect()
     tracemalloc.start()
+    started = time.perf_counter()
     result = normalize_scene(read_source(path))
+    elapsed = time.perf_counter() - started
     _current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
+    print(f"downsample peak {peak / 1024**3:.3f} GB in {elapsed:.1f} s")
     assert len(result.points) > 0
     assert peak < int(1.5 * 1024**3), f"downsample heap {peak / 1024**3:.2f} GB"
 

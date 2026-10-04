@@ -32,7 +32,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 13 — Fixtures and furniture — `done`
 - [x] Phase 14 — IFC import — `done`
 - [x] Phase 15 — AI assistant — `done`
-- [ ] Phase 16 — Hardening and release — `not started`
+- [x] Phase 16 — Hardening and release — `done`
 - [ ] Phase 17 — Optional machine-learning detectors — `not started`
 
 ## Decisions that every phase keeps
@@ -721,7 +721,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-15
 
 ## Phase 16 — Hardening and release
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 15 done.
 
