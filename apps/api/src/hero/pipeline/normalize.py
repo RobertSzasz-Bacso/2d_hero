@@ -38,6 +38,8 @@ class Normalized:
     levels: list[LevelSlice]
     manhattan_angle_deg: float
     issues: list[dict[str, str]] = field(default_factory=list)
+    mesh_vertices: np.ndarray | None = None
+    mesh_faces: np.ndarray | None = None
 
 
 def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "auto") -> Normalized:
@@ -65,11 +67,14 @@ def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "aut
     rotation = _rotation_to_z(up)
     points = points @ rotation.T
     normals = normals @ rotation.T
-    points, normals, angle = _manhattan(points, normals)
-    points = _seat_floors(points, normals)
+    points, normals, angle, manhattan = _manhattan(points, normals)
+    points, shift = _seat_floors(points, normals)
+    mesh_vertices, mesh_faces = _mesh(scene, scale, rotation, manhattan, shift)
     levels, hints = _storeys(points, normals)
     issues = [*_issues(guessed, uncertain), *hints]
-    return Normalized(points, normals, scale, voxel, up, levels, angle, issues)
+    return Normalized(
+        points, normals, scale, voxel, up, levels, angle, issues, mesh_vertices, mesh_faces
+    )
 
 
 def _bbox(chunks: Iterator[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
@@ -348,10 +353,12 @@ def _rodrigues(axis: np.ndarray, angle: float) -> np.ndarray:
     return np.eye(3) + np.sin(angle) * cross + (1.0 - np.cos(angle)) * (cross @ cross)
 
 
-def _manhattan(points: np.ndarray, normals: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+def _manhattan(
+    points: np.ndarray, normals: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float, np.ndarray]:
     horizontal = np.abs(normals[:, 2]) < np.sin(np.deg2rad(15))
     if int(horizontal.sum()) < 50:
-        return points, normals, 0.0
+        return points, normals, 0.0, np.eye(3)
     angles = np.degrees(np.arctan2(normals[horizontal, 1], normals[horizontal, 0])) % 180.0
     hist, edges = np.histogram(angles, bins=180, range=(0.0, 180.0))
     peak = int(np.argmax(hist))
@@ -363,18 +370,35 @@ def _manhattan(points: np.ndarray, normals: np.ndarray) -> tuple[np.ndarray, np.
     cosine = float(np.cos(radians))
     sine = float(np.sin(radians))
     rotation = np.array([[cosine, -sine, 0.0], [sine, cosine, 0.0], [0.0, 0.0, 1.0]])
-    return points @ rotation.T, normals @ rotation.T, float(np.degrees(radians))
+    return points @ rotation.T, normals @ rotation.T, float(np.degrees(radians)), rotation
 
 
-def _seat_floors(points: np.ndarray, normals: np.ndarray) -> np.ndarray:
+def _seat_floors(points: np.ndarray, normals: np.ndarray) -> tuple[np.ndarray, float]:
     floor = normals[:, 2] > np.cos(np.deg2rad(15))
     if int(floor.sum()) == 0:
-        return points
+        return points, 0.0
     peaks = _peaks(points[floor, 2])
     shift = min(height for height, _count in peaks) if peaks else float(np.min(points[floor, 2]))
     moved = points.copy()
     moved[:, 2] -= shift
-    return moved
+    return moved, shift
+
+
+def _mesh(
+    scene: RawScene,
+    scale: float,
+    up_rotation: np.ndarray,
+    manhattan: np.ndarray,
+    shift: float,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Keep source triangles in the same frame as the point cloud."""
+    if scene.mesh_vertices is None or scene.mesh_faces is None or len(scene.mesh_faces) == 0:
+        return None, None
+    vertices = np.asarray(scene.mesh_vertices, dtype=np.float64) * scale
+    vertices = vertices @ up_rotation.T @ manhattan.T
+    vertices = np.ascontiguousarray(vertices)
+    vertices[:, 2] -= shift
+    return vertices, np.asarray(scene.mesh_faces, dtype=np.int64)
 
 
 def _storeys(

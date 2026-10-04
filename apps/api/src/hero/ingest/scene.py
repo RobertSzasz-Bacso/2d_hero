@@ -15,6 +15,8 @@ class RawScene:
     chunks: Callable[[], Iterator[np.ndarray]] | None
     unit_scale: float | None
     source_format: str
+    mesh_vertices: np.ndarray | None = None
+    mesh_faces: np.ndarray | None = None
 
     def iter_points(self) -> Iterator[np.ndarray]:
         if self.chunks is not None:

@@ -23,13 +23,29 @@ def read_source(path: Path) -> RawScene:
     if suffix == ".ifc":
         vertices, faces = _read_ifc(path)
         points, normals = sample_mesh(vertices, faces, _mesh_step(vertices))
-        return RawScene(points, normals, None, None, "ifc")
+        return _scene(points, normals, None, "ifc", vertices, faces)
     vertices, faces = _read_trimesh(path)
     if len(faces):
         points, normals = sample_mesh(vertices, faces, _mesh_step(vertices))
     else:
         points, normals = vertices, None
-    return RawScene(points, normals, None, None, suffix[1:])
+    return _scene(points, normals, None, suffix[1:], vertices, faces)
+
+
+def _scene(
+    points: np.ndarray,
+    normals: np.ndarray | None,
+    scale: float | None,
+    source_format: str,
+    vertices: np.ndarray,
+    faces: np.ndarray,
+) -> RawScene:
+    mesh_vertices = None
+    mesh_faces = None
+    if len(faces):
+        mesh_vertices = np.asarray(vertices, dtype=np.float64)
+        mesh_faces = np.asarray(faces, dtype=np.int64)
+    return RawScene(points, normals, None, scale, source_format, mesh_vertices, mesh_faces)
 
 
 def iter_las_chunks(path: Path, points_per_iteration: int = 250_000) -> Iterator[np.ndarray]:
@@ -185,8 +201,12 @@ def _usd_faces(counts: list[int], indices: list[int]) -> np.ndarray:
 def _read_ifc(path: Path) -> tuple[np.ndarray, np.ndarray]:
     import ifcopenshell
     import ifcopenshell.geom
+    import ifcopenshell.util.unit
 
     model = ifcopenshell.open(str(path))
+    scale = float(ifcopenshell.util.unit.calculate_unit_scale(model))
+    if scale <= 0:
+        scale = 1.0
     geometry = cast(Any, ifcopenshell.geom)
     settings = geometry.settings()
     settings.set("USE_WORLD_COORDS", True)
@@ -200,7 +220,7 @@ def _read_ifc(path: Path) -> tuple[np.ndarray, np.ndarray]:
             shape = geometry.create_shape(settings, product)
         except Exception:
             continue
-        verts = np.asarray(shape.geometry.verts, dtype=np.float64).reshape(-1, 3)
+        verts = np.asarray(shape.geometry.verts, dtype=np.float64).reshape(-1, 3) * scale
         tris = np.asarray(shape.geometry.faces, dtype=np.int64).reshape(-1, 3)
         if len(verts) == 0 or len(tris) == 0:
             continue

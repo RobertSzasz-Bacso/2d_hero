@@ -52,9 +52,16 @@ def build_building(
     millimetres: bool = False,
     missing_face: bool = False,
     open_gap: bool = False,
+    blocked_opening: bool = False,
+    furniture: Literal["default", "bathroom", "bedroom", "bare", "block"] = "default",
 ) -> Building:
     """Build the default apartment. The same seed always returns the same mesh."""
-    vertices, faces = _mesh(missing_face=missing_face, open_gap=open_gap)
+    vertices, faces = _mesh(
+        missing_face=missing_face,
+        open_gap=open_gap,
+        blocked_opening=blocked_opening,
+        furniture=furniture,
+    )
     generator = np.random.default_rng(seed)
     if noise_m > 0:
         vertices = vertices + generator.normal(0.0, noise_m, size=vertices.shape)
@@ -70,7 +77,7 @@ def build_building(
     if millimetres:
         vertices = vertices * 1000.0
     return Building(
-        plan=_plan(scale),
+        plan=_plan(scale, furniture=furniture),
         vertices=np.ascontiguousarray(vertices, dtype=np.float64),
         faces=np.ascontiguousarray(faces, dtype=np.int64),
         walls=_walls(),
@@ -82,7 +89,11 @@ def build_building(
     )
 
 
-def _plan(unit_scale: float) -> Plan:
+def _plan(
+    unit_scale: float,
+    *,
+    furniture: Literal["default", "bathroom", "bedroom", "bare", "block"] = "default",
+) -> Plan:
     return Plan(
         schemaVersion=2,
         units="m",
@@ -98,11 +109,21 @@ def _plan(unit_scale: float) -> Plan:
                 linked=False,
             )
         ),
-        levels=[_level("Lg", "Ground", 0.0, door=True), _level("Lu", "Upper", _STOREY, door=False)],
+        levels=[
+            _level("Lg", "Ground", 0.0, door=True, furniture=furniture),
+            _level("Lu", "Upper", _STOREY, door=False, furniture="bare"),
+        ],
     )
 
 
-def _level(prefix: str, name: str, elevation: float, *, door: bool) -> Level:
+def _level(
+    prefix: str,
+    name: str,
+    elevation: float,
+    *,
+    door: bool,
+    furniture: Literal["default", "bathroom", "bedroom", "bare", "block"] = "default",
+) -> Level:
     vertices = [
         Vertex(id=f"{prefix}a", x=0, y=0),
         Vertex(id=f"{prefix}b", x=_WIDTH, y=0),
@@ -161,7 +182,7 @@ def _level(prefix: str, name: str, elevation: float, *, door: bool) -> Level:
         )
     columns = []
     stairs = []
-    fixtures = []
+    fixtures = _fixtures(prefix, furniture) if door else []
     if door:
         columns.append(Column(id=f"{prefix}col", x=2, y=2, width=0.4, depth=0.4, rotationDeg=0))
         stairs.append(
@@ -178,43 +199,6 @@ def _level(prefix: str, name: str, elevation: float, *, door: bool) -> Level:
                 fromElevation=0,
                 toElevation=_STOREY,
             )
-        )
-        fixtures.extend(
-            [
-                Fixture(
-                    id=f"{prefix}wc",
-                    symbol="toilet",
-                    x=1.0,
-                    y=1.0,
-                    rotationDeg=0,
-                    width=0.4,
-                    depth=0.7,
-                    confidence=1,
-                    role="fixture",
-                ),
-                Fixture(
-                    id=f"{prefix}sink",
-                    symbol="sink",
-                    x=1.2,
-                    y=5.0,
-                    rotationDeg=0,
-                    width=0.6,
-                    depth=0.45,
-                    confidence=1,
-                    role="fixture",
-                ),
-                Fixture(
-                    id=f"{prefix}sofa",
-                    symbol="sofa",
-                    x=2.5,
-                    y=4.2,
-                    rotationDeg=0,
-                    width=2.0,
-                    depth=0.9,
-                    confidence=1,
-                    role="furniture",
-                ),
-            ]
         )
     half = _THICK / 2
     part = _PARTITION / 2
@@ -234,6 +218,7 @@ def _level(prefix: str, name: str, elevation: float, *, door: bool) -> Level:
         columns=columns,
         stairs=stairs,
         rooms=rooms,
+        fixtures=fixtures,
     )
 
 
@@ -377,7 +362,13 @@ class _Mesh:
                 self.add_quad([outer3, outer2, inner2, inner3])
 
 
-def _mesh(*, missing_face: bool, open_gap: bool = False) -> tuple[np.ndarray, np.ndarray]:
+def _mesh(
+    *,
+    missing_face: bool,
+    open_gap: bool = False,
+    blocked_opening: bool = False,
+    furniture: Literal["default", "bathroom", "bedroom", "bare", "block"] = "default",
+) -> tuple[np.ndarray, np.ndarray]:
     mesh = _Mesh()
     walls = [
         (np.array([0.0, 0.0]), np.array([_WIDTH, 0.0]), _THICK),
@@ -411,12 +402,95 @@ def _mesh(*, missing_face: bool, open_gap: bool = False) -> tuple[np.ndarray, np
         _slab(mesh, z1, flip=True)
     _box(mesh, 1.8, 1.8, 0.0, 0.4, 0.4, _CEILING)
     _box(mesh, 5.2, 0.4, 0.0, 1.2, 2.8, _STOREY)
-    _box(mesh, 0.8, 0.65, 0.0, 0.4, 0.7, 0.4)
-    _box(mesh, 0.9, 4.75, 0.0, 0.6, 0.5, 0.85)
-    _box(mesh, 1.5, 3.75, 0.0, 2.0, 0.9, 0.8)
+    _ramp(mesh)
+    if blocked_opening:
+        _box(mesh, 1.55, -0.08, 0.55, 0.90, 0.16, 0.80)
+    if furniture in {"default", "bathroom"}:
+        _box(mesh, 0.8, 0.65, 0.0, 0.4, 0.7, 0.4)
+        _box(mesh, 0.9, 4.775, 0.0, 0.6, 0.45, 0.18)
+    if furniture == "default":
+        _box(mesh, 1.5, 3.75, 0.0, 2.0, 0.9, 0.8)
+    elif furniture == "bedroom":
+        _box(mesh, 1.2, 2.6, 0.0, 1.6, 2.0, 0.5)
+    elif furniture == "block":
+        _box(mesh, 1.75, 2.75, 0.0, 0.5, 0.5, 0.5)
     vertices = np.asarray(mesh.vertices, dtype=np.float64)
     faces = np.asarray(mesh.faces, dtype=np.int64)
     return vertices, faces
+
+
+def _fixtures(
+    prefix: str,
+    furniture: Literal["default", "bathroom", "bedroom", "bare", "block"],
+) -> list[Fixture]:
+    toilet = Fixture(
+        id=f"{prefix}wc",
+        symbol="toilet",
+        x=1.0,
+        y=1.0,
+        rotationDeg=0,
+        width=0.4,
+        depth=0.7,
+        confidence=1,
+        role="fixture",
+    )
+    sink = Fixture(
+        id=f"{prefix}sink",
+        symbol="sink",
+        x=1.2,
+        y=5.0,
+        rotationDeg=0,
+        width=0.6,
+        depth=0.45,
+        confidence=1,
+        role="fixture",
+    )
+    if furniture == "bathroom":
+        return [toilet, sink]
+    if furniture == "default":
+        return [
+            toilet,
+            sink,
+            Fixture(
+                id=f"{prefix}sofa",
+                symbol="sofa",
+                x=2.5,
+                y=4.2,
+                rotationDeg=0,
+                width=2.0,
+                depth=0.9,
+                confidence=1,
+                role="furniture",
+            ),
+        ]
+    if furniture == "bedroom":
+        return [
+            Fixture(
+                id=f"{prefix}bed",
+                symbol="bed-double",
+                x=2.0,
+                y=3.6,
+                rotationDeg=0,
+                width=1.6,
+                depth=2.0,
+                confidence=1,
+                role="furniture",
+            )
+        ]
+    return []
+
+
+def _ramp(mesh: _Mesh) -> None:
+    """38° slope over the stair footprint. A solid box is not step or slope evidence."""
+    rise = 2.2
+    mesh.add_quad(
+        [
+            np.array([5.2, 0.4, 0.0]),
+            np.array([6.4, 0.4, 0.0]),
+            np.array([6.4, 3.2, rise]),
+            np.array([5.2, 3.2, rise]),
+        ]
+    )
 
 
 def _slab(mesh: _Mesh, z: float, *, flip: bool) -> None:

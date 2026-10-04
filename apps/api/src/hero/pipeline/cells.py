@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any
 
 import networkx as nx
 import numpy as np
@@ -53,6 +54,10 @@ class DraftLevel:
     walls: list[DraftWall] = field(default_factory=list)
     rooms: list[DraftRoom] = field(default_factory=list)
     issues: list[dict[str, str]] = field(default_factory=list)
+    openings: list[Any] = field(default_factory=list)
+    columns: list[Any] = field(default_factory=list)
+    stairs: list[Any] = field(default_factory=list)
+    fixtures: list[Any] = field(default_factory=list)
 
 
 def draft_levels(result: Normalized, faces: list[WallFace]) -> list[DraftLevel]:

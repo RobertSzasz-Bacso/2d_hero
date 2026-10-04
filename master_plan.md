@@ -25,10 +25,10 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 6 — Construction drawing and PDF — `done`
 - [x] Phase 7 — Test kit — `done`
 - [x] Phase 8 — Ingest, normalization, levels — `done`
-- [ ] Phase 9 — Import UI, underlays, 3D viewer — `not started`
-- [ ] Phase 10 — Wall surfaces — `not started`
-- [ ] Phase 11 — Wall graph and rooms — `not started`
-- [ ] Phase 12 — Openings, columns, stairs — `not started`
+- [x] Phase 9 — Import UI, underlays, 3D viewer — `done`
+- [x] Phase 10 — Wall surfaces — `done`
+- [x] Phase 11 — Wall graph and rooms — `done`
+- [x] Phase 12 — Openings, columns, stairs — `done`
 - [ ] Phase 13 — Fixtures and furniture — `not started`
 - [ ] Phase 14 — IFC import — `not started`
 - [ ] Phase 15 — AI assistant — `not started`
@@ -554,7 +554,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-11
 
 ## Phase 12 — Openings, columns, stairs
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 11 done.
 

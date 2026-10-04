@@ -1,23 +1,29 @@
 """Write the detected wall graph into plan.json."""
 
 import json
+import math
 from pathlib import Path
 
 from hero.atomic import atomic_write_text
 from hero.pipeline.cells import draft_levels
 from hero.pipeline.normalize import Normalized
+from hero.pipeline.openings import attach_structure
 from hero.pipeline.shells import np_argmax_abs
-from hero.pipeline.surfaces import SurfaceResult
+from hero.pipeline.surfaces import SurfaceResult, detect_surfaces
 from hero.schema import (
+    Column,
     Detection,
     DetectionSource,
     Issue,
     Level,
+    Opening,
     Plan,
     Point,
     Room,
+    Stair,
     Vertex,
     Wall,
+    blank_plan,
     dump_plan,
 )
 
@@ -59,7 +65,7 @@ def write_detected_plan(folder: Path, result: Normalized, surfaces: SurfaceResul
     suffix = Path(name).suffix.lower()
     linked = meta.get("linkedPath")
     axis = up_axis if up_axis in {"x", "y", "z"} else "xyz"[int(np_argmax_abs(result.estimated_up))]
-    drafts = draft_levels(result, surfaces.faces)
+    drafts = _populated(result, surfaces)
     plan.levels = [_level(draft) for draft in drafts] or plan.levels
     plan.detection = Detection(
         source=DetectionSource(
@@ -75,6 +81,35 @@ def write_detected_plan(folder: Path, result: Normalized, surfaces: SurfaceResul
     )
     plan.revision += 1
     atomic_write_text(plan_path, dump_plan(plan))
+
+
+def scan_plan(result: Normalized) -> Plan:
+    """Editable plan for one normalized scene, including openings, columns, and stairs."""
+    drafts, surfaces = detect_plan(result)
+    plan = blank_plan("Synthetic")
+    plan.levels = [_level(draft) for draft in drafts]
+    plan.detection = Detection(
+        issues=_issues(
+            [
+                *result.issues,
+                *surfaces.issues,
+                *[issue for draft in drafts for issue in draft.issues],
+            ]
+        ),
+    )
+    return plan
+
+
+def detect_plan(result: Normalized) -> tuple[list, SurfaceResult]:
+    """Wall graph plus openings, columns, and stairs."""
+    surfaces = detect_surfaces(result)
+    return _populated(result, surfaces), surfaces
+
+
+def _populated(result: Normalized, surfaces: SurfaceResult):
+    drafts = draft_levels(result, surfaces.faces)
+    attach_structure(drafts, result, surfaces.faces)
+    return drafts
 
 
 def _level(draft) -> Level:
@@ -100,6 +135,54 @@ def _level(draft) -> Level:
             Room(id=room.id, name=room.name, number=room.number, seed=Point(x=room.x, y=room.y))
             for room in draft.rooms
         ],
+        openings=[
+            Opening(
+                id=opening.id,
+                wall=opening.wall,
+                kind=opening.kind,
+                offset=opening.offset,
+                width=opening.width,
+                sill=opening.sill,
+                head=opening.head,
+                swing=opening.swing,
+                swingSide=opening.swing_side,
+                confidence=opening.confidence,
+            )
+            for opening in draft.openings
+        ],
+        columns=[
+            Column(
+                id=column.id,
+                x=column.x,
+                y=column.y,
+                width=column.width,
+                depth=column.depth,
+                rotationDeg=column.rotation_deg,
+            )
+            for column in draft.columns
+        ],
+        stairs=[_stair(stair) for stair in draft.stairs],
+    )
+
+
+def _stair(stair) -> Stair:
+    dx, dy = float(stair.direction[0]), float(stair.direction[1])
+    length = math.hypot(dx, dy)
+    if length < 1e-8:
+        dx, dy = 0.0, 1.0
+    else:
+        dx, dy = dx / length, dy / length
+    start = float(stair.from_elevation)
+    end = float(stair.to_elevation)
+    if end <= start:
+        end = start + 0.15
+    return Stair(
+        id=stair.id,
+        outline=[Point(x=x, y=y) for x, y in stair.outline],
+        direction=Point(x=dx, y=dy),
+        riserCount=max(1, int(stair.riser_count)),
+        fromElevation=start,
+        toElevation=end,
     )
 
 

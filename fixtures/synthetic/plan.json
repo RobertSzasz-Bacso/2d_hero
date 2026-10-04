@@ -174,7 +174,41 @@
         }
       ],
       "separators": [],
-      "fixtures": [],
+      "fixtures": [
+        {
+          "id": "Lgwc",
+          "symbol": "toilet",
+          "x": 1.0,
+          "y": 1.0,
+          "rotationDeg": 0.0,
+          "width": 0.4,
+          "depth": 0.7,
+          "confidence": 1.0,
+          "role": "fixture"
+        },
+        {
+          "id": "Lgsink",
+          "symbol": "sink",
+          "x": 1.2,
+          "y": 5.0,
+          "rotationDeg": 0.0,
+          "width": 0.6,
+          "depth": 0.45,
+          "confidence": 1.0,
+          "role": "fixture"
+        },
+        {
+          "id": "Lgsofa",
+          "symbol": "sofa",
+          "x": 2.5,
+          "y": 4.2,
+          "rotationDeg": 0.0,
+          "width": 2.0,
+          "depth": 0.9,
+          "confidence": 1.0,
+          "role": "furniture"
+        }
+      ],
       "texts": [],
       "dimensions": [],
       "suppressedAutoDimensions": []
