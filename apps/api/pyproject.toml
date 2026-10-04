@@ -17,6 +17,7 @@ dependencies = [
     "pye57>=0.4.19",
     "python-multipart>=0.0.32",
     "shapely>=2.1.2",
+    "sse-starlette>=3.5.0",
     "trimesh>=5.1.1",
     "usd-core>=26.8",
     "uvicorn>=0.54.0",

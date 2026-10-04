@@ -1,5 +1,7 @@
 """FastAPI application: health, projects, settings, and the built web app."""
 
+import asyncio
+import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -11,11 +13,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, ValidationError
+from sse_starlette.sse import EventSourceResponse
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from hero.dialogs import ask_open_file
+from hero.jobs import JobBusy, cancel_job, job_snapshot, shutdown_pool, source_file, start_import
 from hero.keystore import cursor_key_is_set, delete_cursor_key, set_cursor_key
 from hero.paths import app_config_dir, default_projects_dir, web_dist
 from hero.projects import (
@@ -44,6 +48,14 @@ class CursorKeyBody(BaseModel):
     key: str
 
 
+class ImportJobBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    kind: str
+    units: str = "auto"
+    upAxis: str = "auto"
+
+
 def create_app(
     token: str,
     *,
@@ -62,6 +74,7 @@ def create_app(
         if session_file is not None:
             write_token(session_file, token)
         yield
+        shutdown_pool()
 
     def dirs() -> tuple[Path, Path]:
         resolved_projects = projects_dir if projects_dir is not None else default_projects_dir()
@@ -218,6 +231,58 @@ def create_app(
                 },
             )
         return JSONResponse(saved.model_dump(mode="json"))
+
+    @app.post("/api/projects/{project_id}/jobs")
+    def post_job(project_id: str, body: ImportJobBody) -> JSONResponse:
+        if body.kind != "import":
+            return JSONResponse({"detail": "This job kind is not supported."}, status_code=400)
+        if body.units not in {"m", "mm", "auto"} or body.upAxis not in {"auto", "x", "y", "z"}:
+            return JSONResponse({"detail": "Request was not valid."}, status_code=422)
+        try:
+            folder = project_store().project_dir(project_id)
+            source_file(folder)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        except LinkedFileMissing as exc:
+            return JSONResponse(
+                {"detail": f"The linked file is missing: {exc.path}"},
+                status_code=400,
+            )
+        except (FileNotFoundError, OSError):
+            return JSONResponse({"detail": "Source file is missing."}, status_code=400)
+        try:
+            job_id = start_import(folder, body.units, body.upAxis)
+        except JobBusy:
+            return JSONResponse({"detail": "A job is already running."}, status_code=409)
+        return JSONResponse({"id": job_id, "state": "running"})
+
+    @app.get("/api/jobs/{job_id}")
+    def get_job(job_id: str) -> JSONResponse:
+        snapshot = job_snapshot(job_id)
+        if snapshot is None:
+            return JSONResponse({"detail": "Job was not found."}, status_code=404)
+        return JSONResponse(snapshot)
+
+    @app.get("/api/jobs/{job_id}/events")
+    def job_events(job_id: str) -> EventSourceResponse:
+        if job_snapshot(job_id) is None:
+            raise HTTPException(status_code=404, detail="Job was not found.")
+
+        async def stream() -> AsyncIterator[dict[str, str]]:
+            while True:
+                snapshot = job_snapshot(job_id) or {"state": "error", "error": "Job was not found."}
+                yield {"event": "progress", "data": json.dumps(snapshot)}
+                if snapshot.get("state") in {"done", "cancelled", "error"}:
+                    break
+                await asyncio.sleep(0.2)
+
+        return EventSourceResponse(stream())
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    def post_cancel(job_id: str) -> JSONResponse:
+        if not cancel_job(job_id):
+            return JSONResponse({"detail": "Job was not found."}, status_code=404)
+        return JSONResponse({"state": "cancelled"})
 
     static_dir = web_dist() if dist_dir is None else dist_dir
     if static_dir.is_dir():

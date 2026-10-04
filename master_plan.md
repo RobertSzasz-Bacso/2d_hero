@@ -24,7 +24,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 5 — Editor drawing tools — `done`
 - [x] Phase 6 — Construction drawing and PDF — `done`
 - [x] Phase 7 — Test kit — `done`
-- [ ] Phase 8 — Ingest, normalization, levels — `not started`
+- [x] Phase 8 — Ingest, normalization, levels — `done`
 - [ ] Phase 9 — Import UI, underlays, 3D viewer — `not started`
 - [ ] Phase 10 — Wall surfaces — `not started`
 - [ ] Phase 11 — Wall graph and rooms — `not started`
@@ -383,7 +383,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-07
 
 ## Phase 8 — Ingest, normalization, levels
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 7 done.
 
