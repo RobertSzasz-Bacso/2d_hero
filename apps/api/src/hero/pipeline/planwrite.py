@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hero.atomic import atomic_write_text
 from hero.pipeline.cells import draft_levels
+from hero.pipeline.fixtures import attach_fixtures
 from hero.pipeline.normalize import Normalized
 from hero.pipeline.openings import attach_structure
 from hero.pipeline.shells import np_argmax_abs
@@ -14,6 +15,7 @@ from hero.schema import (
     Column,
     Detection,
     DetectionSource,
+    Fixture,
     Issue,
     Level,
     Opening,
@@ -84,7 +86,7 @@ def write_detected_plan(folder: Path, result: Normalized, surfaces: SurfaceResul
 
 
 def scan_plan(result: Normalized) -> Plan:
-    """Editable plan for one normalized scene, including openings, columns, and stairs."""
+    """Editable plan for one normalized scene, including openings and fixtures."""
     drafts, surfaces = detect_plan(result)
     plan = blank_plan("Synthetic")
     plan.levels = [_level(draft) for draft in drafts]
@@ -101,7 +103,7 @@ def scan_plan(result: Normalized) -> Plan:
 
 
 def detect_plan(result: Normalized) -> tuple[list, SurfaceResult]:
-    """Wall graph plus openings, columns, and stairs."""
+    """Wall graph plus openings, columns, stairs, and fixtures."""
     surfaces = detect_surfaces(result)
     return _populated(result, surfaces), surfaces
 
@@ -109,6 +111,7 @@ def detect_plan(result: Normalized) -> tuple[list, SurfaceResult]:
 def _populated(result: Normalized, surfaces: SurfaceResult):
     drafts = draft_levels(result, surfaces.faces)
     attach_structure(drafts, result, surfaces.faces)
+    attach_fixtures(drafts, result)
     return drafts
 
 
@@ -162,6 +165,20 @@ def _level(draft) -> Level:
             for column in draft.columns
         ],
         stairs=[_stair(stair) for stair in draft.stairs],
+        fixtures=[
+            Fixture(
+                id=fixture.id,
+                symbol=fixture.symbol,
+                x=fixture.x,
+                y=fixture.y,
+                rotationDeg=fixture.rotation_deg,
+                width=fixture.width,
+                depth=fixture.depth,
+                confidence=fixture.confidence,
+                role=fixture.role,
+            )
+            for fixture in draft.fixtures
+        ],
     )
 
 
