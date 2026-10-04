@@ -1,0 +1,330 @@
+{
+  "schemaVersion": 2,
+  "units": "m",
+  "revision": 0,
+  "project": {
+    "name": "Synthetic",
+    "address": "",
+    "northAngleDeg": 0.0
+  },
+  "levels": [
+    {
+      "id": "Lg",
+      "name": "Ground",
+      "elevation": 0.0,
+      "ceilingHeight": 2.7,
+      "vertices": [
+        {
+          "id": "Lga",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "id": "Lgb",
+          "x": 8.0,
+          "y": 0.0
+        },
+        {
+          "id": "Lgc",
+          "x": 8.0,
+          "y": 6.0
+        },
+        {
+          "id": "Lgd",
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "id": "Lge",
+          "x": 4.0,
+          "y": 0.0
+        },
+        {
+          "id": "Lgf",
+          "x": 4.0,
+          "y": 6.0
+        }
+      ],
+      "walls": [
+        {
+          "id": "Lgws",
+          "a": "Lga",
+          "b": "Lgb",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Lgwe",
+          "a": "Lgb",
+          "b": "Lgc",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Lgwn",
+          "a": "Lgc",
+          "b": "Lgd",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Lgww",
+          "a": "Lgd",
+          "b": "Lga",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Lgwp",
+          "a": "Lge",
+          "b": "Lgf",
+          "thickness": 0.15,
+          "kind": "partition",
+          "confidence": 1.0
+        }
+      ],
+      "openings": [
+        {
+          "id": "Lgdoor",
+          "wall": "Lgws",
+          "kind": "door",
+          "offset": 0.25,
+          "width": 0.9,
+          "sill": 0.0,
+          "head": 2.1,
+          "swing": "left",
+          "swingSide": "positive",
+          "confidence": 1.0
+        },
+        {
+          "id": "Lgwin",
+          "wall": "Lgwn",
+          "kind": "window",
+          "offset": 0.25,
+          "width": 1.2,
+          "sill": 0.9,
+          "head": 2.1,
+          "swing": "none",
+          "swingSide": "positive",
+          "confidence": 1.0
+        }
+      ],
+      "columns": [
+        {
+          "id": "Lgcol",
+          "x": 2.0,
+          "y": 2.0,
+          "width": 0.4,
+          "depth": 0.4,
+          "rotationDeg": 0.0
+        }
+      ],
+      "stairs": [
+        {
+          "id": "Lgstair",
+          "outline": [
+            {
+              "x": 5.2,
+              "y": 0.4
+            },
+            {
+              "x": 6.4,
+              "y": 0.4
+            },
+            {
+              "x": 6.4,
+              "y": 3.2
+            },
+            {
+              "x": 5.2,
+              "y": 3.2
+            }
+          ],
+          "direction": {
+            "x": 0.0,
+            "y": 1.0
+          },
+          "riserCount": 16,
+          "fromElevation": 0.0,
+          "toElevation": 3.0
+        }
+      ],
+      "rooms": [
+        {
+          "id": "Lgr1",
+          "name": "Living",
+          "number": "01",
+          "seed": {
+            "x": 2.0,
+            "y": 3.0
+          }
+        },
+        {
+          "id": "Lgr2",
+          "name": "Kitchen",
+          "number": "02",
+          "seed": {
+            "x": 6.0,
+            "y": 3.0
+          }
+        }
+      ],
+      "separators": [],
+      "fixtures": [],
+      "texts": [],
+      "dimensions": [],
+      "suppressedAutoDimensions": []
+    },
+    {
+      "id": "Lu",
+      "name": "Upper",
+      "elevation": 3.0,
+      "ceilingHeight": 2.7,
+      "vertices": [
+        {
+          "id": "Lua",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "id": "Lub",
+          "x": 8.0,
+          "y": 0.0
+        },
+        {
+          "id": "Luc",
+          "x": 8.0,
+          "y": 6.0
+        },
+        {
+          "id": "Lud",
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "id": "Lue",
+          "x": 4.0,
+          "y": 0.0
+        },
+        {
+          "id": "Luf",
+          "x": 4.0,
+          "y": 6.0
+        }
+      ],
+      "walls": [
+        {
+          "id": "Luws",
+          "a": "Lua",
+          "b": "Lub",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Luwe",
+          "a": "Lub",
+          "b": "Luc",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Luwn",
+          "a": "Luc",
+          "b": "Lud",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Luww",
+          "a": "Lud",
+          "b": "Lua",
+          "thickness": 0.25,
+          "kind": "exterior",
+          "confidence": 1.0
+        },
+        {
+          "id": "Luwp",
+          "a": "Lue",
+          "b": "Luf",
+          "thickness": 0.15,
+          "kind": "partition",
+          "confidence": 1.0
+        }
+      ],
+      "openings": [
+        {
+          "id": "Luwin",
+          "wall": "Luwn",
+          "kind": "window",
+          "offset": 0.25,
+          "width": 1.2,
+          "sill": 0.9,
+          "head": 2.1,
+          "swing": "none",
+          "swingSide": "positive",
+          "confidence": 1.0
+        }
+      ],
+      "columns": [],
+      "stairs": [],
+      "rooms": [
+        {
+          "id": "Lur1",
+          "name": "Living",
+          "number": "01",
+          "seed": {
+            "x": 2.0,
+            "y": 3.0
+          }
+        },
+        {
+          "id": "Lur2",
+          "name": "Kitchen",
+          "number": "02",
+          "seed": {
+            "x": 6.0,
+            "y": 3.0
+          }
+        }
+      ],
+      "separators": [],
+      "fixtures": [],
+      "texts": [],
+      "dimensions": [],
+      "suppressedAutoDimensions": []
+    }
+  ],
+  "sheet": {
+    "paper": "A3",
+    "orientation": "landscape",
+    "scale": 50,
+    "titleBlock": {
+      "company": "",
+      "project": "",
+      "address": "",
+      "drawnBy": "",
+      "date": "",
+      "sheetTitle": "",
+      "sheetNumber": "",
+      "revisionNote": ""
+    }
+  },
+  "detection": {
+    "source": {
+      "filename": "building.obj",
+      "format": "obj",
+      "unitScaleToMeters": 1.0,
+      "upAxis": "z",
+      "manhattanAngleDeg": 0.0,
+      "linked": false
+    },
+    "issues": []
+  }
+}
