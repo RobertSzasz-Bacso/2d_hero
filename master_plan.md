@@ -21,7 +21,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 2 — Persistence and secure settings — `done`
 - [x] Phase 3 — Editor core — `done`
 - [x] Phase 4 — Editor canvas — `done`
-- [ ] Phase 5 — Editor drawing tools — `not started`
+- [x] Phase 5 — Editor drawing tools — `done`
 - [ ] Phase 6 — Construction drawing and PDF — `not started`
 - [ ] Phase 7 — Test kit — `not started`
 - [ ] Phase 8 — Ingest, normalization, levels — `not started`
@@ -251,7 +251,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-04
 
 ## Phase 5 — Editor drawing tools
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 4 done.
 

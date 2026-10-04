@@ -1,0 +1,52 @@
+{
+  "name": "typed-wall",
+  "op": "typedWall",
+  "input": {
+    "levelId": "L1",
+    "point": { "x": 1, "y": 2 },
+    "lengthM": 3.25,
+    "angleDeg": 90,
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": { "name": "Typed wall", "address": "", "northAngleDeg": 0 },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": { "source": null, "issues": [] },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    }
+  },
+  "expect": { "point": { "x": 1, "y": 5.25 } }
+}

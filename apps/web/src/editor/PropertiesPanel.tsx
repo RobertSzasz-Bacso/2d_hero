@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { moveVertex, setFixtureRotation, setOpening, setRoomName, setTextContent, setWallThickness } from "@/core/ops.ts"
+import { flipSwing, mergeCollinearWall } from "@/core/draw.ts"
+import { moveVertex, setFixtureRotation, setFixtureSize, setOpening, setRoomName, setTextContent, setWallThickness } from "@/core/ops.ts"
 import type { Level, Plan } from "@/core/plan-types.ts"
 import { useEditor } from "./store.ts"
 
@@ -82,6 +83,21 @@ function WallFields({ plan, level, id }: { plan: Plan; level: Level; id: string 
   return (
     <div className="flex flex-col gap-2">
       <Field label="Thickness (m)" value={thickness} onChange={setThickness} onCommit={commit} testId="prop-thickness" />
+      <button
+        type="button"
+        className="h-8 rounded border border-slate-300 bg-white px-2"
+        data-testid="merge-wall"
+        onClick={() => {
+          try {
+            useEditor.getState().commit(mergeCollinearWall(plan, level.id, id))
+            setError("")
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "These walls are not collinear.")
+          }
+        }}
+      >
+        Merge collinear
+      </button>
       {error ? <p className="text-red-700">{error}</p> : null}
     </div>
   )
@@ -145,6 +161,21 @@ function OpeningFields({ plan, level, id }: { plan: Plan; level: Level; id: stri
           <option value="none">none</option>
         </select>
       </label>
+      <button
+        type="button"
+        className="h-8 rounded border border-slate-300 bg-white px-2"
+        data-testid="flip-swing"
+        onClick={() => {
+          try {
+            useEditor.getState().commit(flipSwing(plan, level.id, id))
+            setError("")
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Swing was not flipped.")
+          }
+        }}
+      >
+        Flip swing
+      </button>
       {error ? <p className="text-red-700">{error}</p> : null}
     </div>
   )
@@ -153,12 +184,16 @@ function OpeningFields({ plan, level, id }: { plan: Plan; level: Level; id: stri
 function FixtureFields({ plan, level, id }: { plan: Plan; level: Level; id: string }) {
   const fixture = level.fixtures.find((item) => item.id === id)
   const [rotation, setRotation] = useState(fixture ? String(fixture.rotationDeg) : "")
+  const [width, setWidth] = useState(fixture ? String(fixture.width) : "")
+  const [depth, setDepth] = useState(fixture ? String(fixture.depth) : "")
   const [error, setError] = useState("")
   useEffect(() => {
     if (fixture) {
       setRotation(String(fixture.rotationDeg))
+      setWidth(String(fixture.width))
+      setDepth(String(fixture.depth))
     }
-  }, [fixture, fixture?.rotationDeg])
+  }, [fixture, fixture?.rotationDeg, fixture?.width, fixture?.depth])
   if (!fixture) {
     return null
   }
@@ -173,6 +208,34 @@ function FixtureFields({ plan, level, id }: { plan: Plan; level: Level; id: stri
   return (
     <div className="flex flex-col gap-2">
       <Field label="Rotation (deg)" value={rotation} onChange={setRotation} onCommit={commit} testId="prop-rotation" />
+      <Field
+        label="Width (m)"
+        value={width}
+        onChange={setWidth}
+        onCommit={() => {
+          try {
+            useEditor.getState().commit(setFixtureSize(plan, level.id, id, Number(width), Number(depth)))
+            setError("")
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Size was not applied.")
+          }
+        }}
+        testId="prop-fixture-width"
+      />
+      <Field
+        label="Depth (m)"
+        value={depth}
+        onChange={setDepth}
+        onCommit={() => {
+          try {
+            useEditor.getState().commit(setFixtureSize(plan, level.id, id, Number(width), Number(depth)))
+            setError("")
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Size was not applied.")
+          }
+        }}
+        testId="prop-fixture-depth"
+      />
       {error ? <p className="text-red-700">{error}</p> : null}
     </div>
   )
@@ -229,11 +292,19 @@ function RoomFields({ plan, level, id }: { plan: Plan; level: Level; id: string 
     <div className="flex flex-col gap-2">
       <label className="flex flex-col gap-1">
         Name
-        <input className="h-8 rounded border border-slate-300 bg-white px-2" value={name} onChange={(event) => setName(event.target.value)} onBlur={commit} />
+        <input className="h-8 rounded border border-slate-300 bg-white px-2" data-testid="room-name" value={name} onChange={(event) => setName(event.target.value)} onBlur={commit} onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            commit()
+          }
+        }} />
       </label>
       <label className="flex flex-col gap-1">
         Number
-        <input className="h-8 rounded border border-slate-300 bg-white px-2" value={number} onChange={(event) => setNumber(event.target.value)} onBlur={commit} />
+        <input className="h-8 rounded border border-slate-300 bg-white px-2" data-testid="room-number" value={number} onChange={(event) => setNumber(event.target.value)} onBlur={commit} onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            commit()
+          }
+        }} />
       </label>
     </div>
   )

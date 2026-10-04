@@ -2,7 +2,7 @@ import type { Level, Point } from "@/core/plan-types.ts"
 import { openingEnds } from "./metrics.ts"
 
 export type SelectionItem = {
-  kind: "vertex" | "wall" | "opening" | "column" | "fixture" | "text" | "room" | "separator" | "stair"
+  kind: "vertex" | "wall" | "opening" | "column" | "fixture" | "text" | "room" | "separator" | "stair" | "dimension"
   id: string
 }
 

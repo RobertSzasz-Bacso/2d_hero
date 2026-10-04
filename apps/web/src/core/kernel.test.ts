@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { intersection } from "polygon-clipping"
 import { describe, expect, it } from "vitest"
 import type { Plan, Point } from "./plan-types.ts"
+import { addTypedWall, mergeCollinearWall, splitWall } from "./draw.ts"
 import {
   applyTypedDimension,
   moveVertex,
@@ -50,6 +51,8 @@ type VectorCase = {
     rotationDeg?: number
     textId?: string
     text?: string
+    angleDeg?: number
+    t?: number
   }
   expect: {
     areas?: { id: string; area: number }[]
@@ -443,6 +446,28 @@ describe("shared vectors", () => {
         )
         const fixture = levelOf(next, vector.input.levelId).fixtures.find((item) => item.id === vector.input.fixtureId)
         expect(fixture?.rotationDeg).toBe(vector.expect.rotationDeg)
+        return
+      }
+      if (vector.op === "typedWall") {
+        const next = addTypedWall(
+          vector.input.plan,
+          vector.input.levelId,
+          vector.input.point ?? { x: 0, y: 0 },
+          vector.input.lengthM ?? 0,
+          vector.input.angleDeg ?? 0,
+        )
+        const level = levelOf(next, vector.input.levelId)
+        const wall = level.walls[level.walls.length - 1]
+        const end = level.vertices.find((vertex) => vertex.id === wall?.b)
+        expect(Math.abs((end?.x ?? 0) - (vector.expect.point?.x ?? 0))).toBeLessThanOrEqual(0.001)
+        expect(Math.abs((end?.y ?? 0) - (vector.expect.point?.y ?? 0))).toBeLessThanOrEqual(0.001)
+        return
+      }
+      if (vector.op === "splitMerge") {
+        const before = levelOf(vector.input.plan, vector.input.levelId).walls.length
+        const split = splitWall(vector.input.plan, vector.input.levelId, vector.input.wallId ?? "", vector.input.t ?? 0.5)
+        const merged = mergeCollinearWall(split, vector.input.levelId, vector.input.wallId ?? "")
+        expect(levelOf(merged, vector.input.levelId).walls).toHaveLength(before)
         return
       }
       if (vector.op === "setText") {

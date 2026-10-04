@@ -275,6 +275,20 @@ export function applyTypedDimension(
   return next
 }
 
+export function setFixtureSize(plan: Plan, levelId: string, fixtureId: string, width: number, depth: number): Plan {
+  if (!(width >= 0.1) || !(width <= 3) || !(depth >= 0.1) || !(depth <= 3)) {
+    throw new Error("Symbol size must stay between 0.1 m and 3 m")
+  }
+  const next = clonePlan(plan)
+  const fixture = levelOf(next, levelId).fixtures.find((item) => item.id === fixtureId)
+  if (!fixture) {
+    throw new Error(`Unknown fixture ${fixtureId}`)
+  }
+  fixture.width = width
+  fixture.depth = depth
+  return next
+}
+
 export function setFixtureRotation(plan: Plan, levelId: string, fixtureId: string, rotationDeg: number): Plan {
   if (!Number.isFinite(rotationDeg)) {
     throw new Error("Rotation must be finite")

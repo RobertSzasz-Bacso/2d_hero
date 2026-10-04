@@ -4,6 +4,8 @@ import type { Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
 import PlanCanvas from "./PlanCanvas.tsx"
 import PropertiesPanel from "./PropertiesPanel.tsx"
+import Shortcuts from "./Shortcuts.tsx"
+import Toolbar from "./Toolbar.tsx"
 import { useEditor } from "./store.ts"
 
 export default function Editor({ projectId, onClose }: { projectId: string; onClose: () => void }) {
@@ -60,10 +62,30 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
       const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
       if (event.key === "Escape") {
         useEditor.getState().setSelection([])
+        useEditor.getState().setWallChain(null)
+        useEditor.getState().setShortcutsOpen(false)
         return
       }
       if (typing) {
         return
+      }
+      if (event.key === "?") {
+        event.preventDefault()
+        useEditor.getState().setShortcutsOpen(true)
+      }
+      const toolKey: Record<string, "select" | "wall" | "door" | "window" | "room" | "column" | "stair" | "text"> = {
+        v: "select",
+        w: "wall",
+        d: "door",
+        n: "window",
+        r: "room",
+        c: "column",
+        s: "stair",
+        t: "text",
+      }
+      const nextTool = toolKey[event.key.toLowerCase()]
+      if (nextTool && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        useEditor.getState().setTool(nextTool)
       }
       if (event.key === "f" || event.key === "F") {
         event.preventDefault()
@@ -85,6 +107,14 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
       if (meta && (event.key.toLowerCase() === "y" || (event.key.toLowerCase() === "z" && event.shiftKey))) {
         event.preventDefault()
         useEditor.getState().redo()
+      }
+      if (meta && event.key.toLowerCase() === "c") {
+        event.preventDefault()
+        useEditor.getState().copy()
+      }
+      if (meta && event.key.toLowerCase() === "v") {
+        event.preventDefault()
+        useEditor.getState().paste()
       }
     }
     const onKeyUp = (event: KeyboardEvent) => {
@@ -120,9 +150,11 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
         </p>
       ) : null}
       {loadError ? <p className="px-3 py-2 text-sm text-red-800">{loadError}</p> : null}
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        <Toolbar />
         <PlanCanvas />
         <PropertiesPanel />
+        <Shortcuts />
       </div>
     </div>
   )

@@ -1,10 +1,26 @@
 import { create } from "zustand"
+import { suppressDimension, syncAutoDimensions } from "@/core/dimensions.ts"
+import { copySelection as copyItems, pasteClipboard, type Clipboard } from "@/core/draw.ts"
 import { PlanHistory } from "@/core/history.ts"
 import { removeSelection } from "@/core/ops.ts"
-import type { Plan, Point } from "@/core/plan-types.ts"
+import type { Fixture, Plan, Point } from "@/core/plan-types.ts"
 import { boundsOfPoints, fitCamera, panCamera, zoomAtCursor, type Camera } from "@/view/camera.ts"
 import { heroFetch } from "@/session.ts"
+import type { WallChain } from "./draw-actions.ts"
 import { toggleItem, type SelectionItem } from "./select.ts"
+
+export type EditorTool =
+  | "select"
+  | "wall"
+  | "door"
+  | "window"
+  | "passage"
+  | "room"
+  | "separator"
+  | "column"
+  | "stair"
+  | "text"
+  | "split"
 
 export type SaveStatus = "Saved" | "Saving" | "Error"
 
@@ -25,6 +41,13 @@ type EditorState = {
   spaceDown: boolean
   dimensionUnit: "cm" | "mm"
   gridM: number
+  tool: EditorTool
+  symbol: Fixture["symbol"] | null
+  wallChain: WallChain | null
+  separatorStart: Point | null
+  clipboard: Clipboard | null
+  shortcutsOpen: boolean
+  hideFurniture: boolean
   load: (projectId: string, plan: Plan) => void
   setLoadError: (message: string) => void
   setGrid: (gridM: number, unit: "cm" | "mm") => void
@@ -47,6 +70,14 @@ type EditorState = {
   deleteSelection: () => void
   scheduleSave: () => void
   saveNow: () => void
+  setTool: (tool: EditorTool) => void
+  setSymbol: (symbol: Fixture["symbol"]) => void
+  setWallChain: (chain: WallChain | null) => void
+  setSeparatorStart: (point: Point | null) => void
+  setShortcutsOpen: (open: boolean) => void
+  setHideFurniture: (hide: boolean) => void
+  copy: () => void
+  paste: () => void
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -55,6 +86,14 @@ let pending = false
 
 function levelId(plan: Plan): string | null {
   return plan.levels[0]?.id ?? null
+}
+
+function decorate(plan: Plan): Plan {
+  const id = plan.levels[0]?.id
+  if (!id) {
+    return plan
+  }
+  return syncAutoDimensions(plan, id)
 }
 
 export const useEditor = create<EditorState>((set, get) => ({
@@ -72,6 +111,13 @@ export const useEditor = create<EditorState>((set, get) => ({
   spaceDown: false,
   dimensionUnit: "cm",
   gridM: 1,
+  tool: "select",
+  symbol: null,
+  wallChain: null,
+  separatorStart: null,
+  clipboard: null,
+  shortcutsOpen: false,
+  hideFurniture: false,
   load: (projectId, plan) => {
     if (saveTimer) {
       clearTimeout(saveTimer)
@@ -134,7 +180,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!history || get().dragging) {
       return
     }
-    history.commitPlan(next)
+    const synced = decorate(next)
+    if (JSON.stringify(synced) === JSON.stringify(history.plan)) {
+      return
+    }
+    history.commitPlan(synced)
     set((state) => ({ tick: state.tick + 1 }))
     get().scheduleSave()
   },
@@ -151,7 +201,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     set((state) => ({ tick: state.tick + 1 }))
   },
   endTransaction: () => {
-    get().history?.end()
+    const history = get().history
+    if (history) {
+      history.commitPlan(decorate(history.plan))
+      history.end()
+    }
     set((state) => ({ tick: state.tick + 1, dragging: false }))
   },
   cancelTransaction: () => {
@@ -182,14 +236,46 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!history || !id || selection.length === 0) {
       return
     }
-    const next = removeSelection(
-      history.plan,
-      id,
-      selection.map((item) => item.id),
-    )
-    history.commitPlan(next)
-    set((state) => ({ tick: state.tick + 1, selection: [] }))
-    get().scheduleSave()
+    const geometry = selection.filter((item) => item.kind !== "dimension").map((item) => item.id)
+    let next = history.plan
+    if (geometry.length > 0) {
+      next = removeSelection(next, id, geometry)
+    }
+    for (const item of selection) {
+      if (item.kind === "dimension") {
+        next = suppressDimension(next, id, item.id)
+      }
+    }
+    get().commit(next)
+    set({ selection: [] })
+  },
+  setTool: (tool) =>
+    set({
+      tool,
+      wallChain: tool === "wall" ? get().wallChain : null,
+      separatorStart: null,
+      symbol: null,
+    }),
+  setSymbol: (symbol) => set({ symbol, tool: "select", wallChain: null, separatorStart: null }),
+  setWallChain: (wallChain) => set({ wallChain }),
+  setSeparatorStart: (separatorStart) => set({ separatorStart }),
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  setHideFurniture: (hideFurniture) => set({ hideFurniture }),
+  copy: () => {
+    const { history, selection } = get()
+    const id = history ? levelId(history.plan) : null
+    if (!history || !id || selection.length === 0) {
+      return
+    }
+    set({ clipboard: copyItems(history.plan, id, selection.map((item) => item.id)) })
+  },
+  paste: () => {
+    const { history, clipboard } = get()
+    const id = history ? levelId(history.plan) : null
+    if (!history || !id || !clipboard) {
+      return
+    }
+    get().commit(pasteClipboard(history.plan, id, clipboard))
   },
   scheduleSave: () => {
     if (get().dragging) {
