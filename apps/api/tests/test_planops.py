@@ -9,6 +9,15 @@ from shapely.geometry import Polygon
 
 from hero.planops.draw import add_typed_wall, merge_collinear_wall, split_wall
 from hero.planops.geom import point_in_ring, ring_area
+from hero.planops.grips import (
+    move_selection,
+    rehost_opening,
+    set_clear_distance,
+    set_opening_edge,
+    set_wall_thickness_from_face,
+    snap_fixture_to_wall,
+    snap_rotation,
+)
 from hero.planops.model import wrap
 from hero.planops.ops import (
     apply_typed_dimension,
@@ -188,8 +197,114 @@ def test_shared_vector(raw: dict) -> None:
         nxt = set_text_content(plan, level_id, vector.input.textId, vector.input.text)
         text = next(item for item in _level(nxt, level_id).texts if item.id == vector.input.textId)
         assert text.text == vector.expect.text
+    elif op == "snapRotation":
+        snapped = snap_rotation(vector.input.rotationDeg, bool(vector.input.free))
+        assert snapped == vector.expect.rotationDeg
+    elif op in _GRIP_OPS:
+        _assert_grip(vector, _GRIP_OPS[op])
     else:
         raise AssertionError(f"unknown op {op}")
+
+
+_GRIP_OPS = {
+    "setWallThicknessFromFace": lambda v: set_wall_thickness_from_face(
+        v.input.plan, v.input.levelId, v.input.wallId, v.input.thickness, v.input.keep
+    ),
+    "setClearDistance": lambda v: set_clear_distance(
+        v.input.plan, v.input.levelId, v.input.wallId, v.input.otherId, v.input.distance
+    ),
+    "setOpeningEdge": lambda v: set_opening_edge(
+        v.input.plan, v.input.levelId, v.input.openingId, v.input.edge, v.input.amountM
+    ),
+    "rehostOpening": lambda v: rehost_opening(
+        v.input.plan, v.input.levelId, v.input.openingId, v.input.wallId, v.input.point
+    ),
+    "moveSelection": lambda v: move_selection(
+        v.input.plan, v.input.levelId, [dict(item) for item in v.input["items"]], v.input.delta
+    ),
+    "snapFixtureToWall": lambda v: snap_fixture_to_wall(
+        v.input.plan, v.input.levelId, v.input.fixtureId, v.input.toleranceM
+    ),
+}
+
+
+def _assert_grip(vector, run) -> None:
+    before = json.dumps(vector.input.plan, sort_keys=True)
+    expect = vector.expect
+    if expect.get("error", False):
+        with pytest.raises(ValueError):
+            run(vector)
+        if expect.get("unchanged", False):
+            assert json.dumps(vector.input.plan, sort_keys=True) == before
+        return
+    nxt = run(vector)
+    assert json.dumps(vector.input.plan, sort_keys=True) == before
+    level = _level(nxt, vector.input.levelId)
+    if expect.get("areas") is not None:
+        rooms = extract_rooms(nxt, vector.input.levelId)["rooms"]
+        assert len(rooms) == len(expect.areas)
+        for item in expect.areas:
+            found = next(room for room in rooms if room["id"] == item.id)
+            assert abs(found["area"] - item.area) <= expect.areaTolerance
+    thickness = expect.get("wallThickness")
+    if thickness is not None:
+        wall = next(item for item in level.walls if item.id == thickness.wallId)
+        assert wall.thickness == thickness.thickness
+    clear = expect.get("clear")
+    if clear is not None:
+        measured = _clear_between(nxt, vector.input.levelId, clear.wallId, clear.otherId)
+        assert abs(measured - clear.distance) <= clear.tolerance
+    opening_expect = expect.get("opening")
+    if opening_expect is not None:
+        opening = next(item for item in level.openings if item.id == opening_expect.id)
+        assert opening.wall == opening_expect.wall
+        assert abs(opening.width - opening_expect.width) <= opening_expect.tolerance
+        start, center = _opening_edges(nxt, vector.input.levelId, opening_expect.id)
+        edge = opening_expect.get("startEdge")
+        if edge is not None:
+            assert math.hypot(start[0] - edge.x, start[1] - edge.y) <= opening_expect.tolerance
+        middle = opening_expect.get("center")
+        if middle is not None:
+            gap = math.hypot(center[0] - middle.x, center[1] - middle.y)
+            assert gap <= opening_expect.tolerance
+    fixture_expect = expect.get("fixture")
+    if fixture_expect is not None:
+        fixture = next(item for item in level.fixtures if item.id == fixture_expect.id)
+        assert abs(fixture.x - fixture_expect.x) <= fixture_expect.tolerance
+        assert abs(fixture.y - fixture_expect.y) <= fixture_expect.tolerance
+        assert abs(fixture.rotationDeg - fixture_expect.rotationDeg) <= fixture_expect.tolerance
+    _assert_moved(vector, nxt)
+
+
+def _clear_between(plan, level_id, wall_id, other_id) -> float:
+    level = _level(plan, level_id)
+    verts = _vertices(plan, level_id)
+    wall = next(item for item in level.walls if item.id == wall_id)
+    other = next(item for item in level.walls if item.id == other_id)
+    a = verts[wall.a]
+    b = verts[wall.b]
+    c = verts[other.a]
+    length = math.hypot(b.x - a.x, b.y - a.y)
+    nx = -(b.y - a.y) / length
+    ny = (b.x - a.x) / length
+    d = (c.x - a.x) * nx + (c.y - a.y) * ny
+    return abs(d) - wall.thickness / 2 - other.thickness / 2
+
+
+def _opening_edges(plan, level_id, opening_id):
+    level = _level(plan, level_id)
+    verts = _vertices(plan, level_id)
+    opening = next(item for item in level.openings if item.id == opening_id)
+    wall = next(item for item in level.walls if item.id == opening.wall)
+    a = verts[wall.a]
+    b = verts[wall.b]
+    length = math.hypot(b.x - a.x, b.y - a.y)
+    ux = (b.x - a.x) / length
+    uy = (b.y - a.y) / length
+    cx = a.x + (b.x - a.x) * opening.offset
+    cy = a.y + (b.y - a.y) * opening.offset
+    start = (cx - ux * opening.width / 2, cy - uy * opening.width / 2)
+    return start, (cx, cy)
 
 
 def _assert_rooms(vector) -> None:
@@ -267,13 +382,13 @@ def _reference_angle(vector) -> float | None:
 
 def _assert_moved(vector, plan) -> None:
     verts = _vertices(plan, vector.input.levelId)
-    for vertex_id, point in (vector.expect.vertices or {}).items():
+    for vertex_id, point in (vector.expect.get("vertices") or {}).items():
         vertex = verts[vertex_id]
         assert vertex.x == point.x
         assert vertex.y == point.y
     base = _reference_angle(vector)
     if base is None:
         return
-    for wall_id in vector.expect.orthogonalWalls or []:
+    for wall_id in vector.expect.get("orthogonalWalls") or []:
         angle = _wall_angle(plan, vector.input.levelId, wall_id)
         assert abs(_angle_delta(base, angle) - 90) <= ortho_deg

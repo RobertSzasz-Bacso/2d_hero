@@ -16,6 +16,16 @@ import {
   setTextContent,
   setWallThickness,
 } from "./ops.ts"
+import {
+  moveSelection,
+  rehostOpening,
+  setClearDistance,
+  setOpeningEdge,
+  setWallThicknessFromFace,
+  snapFixtureToWall,
+  snapRotation,
+  type SelectionKind,
+} from "./grips.ts"
 import { pickAt } from "./pick.ts"
 import { extractRooms } from "./rooms.ts"
 import { snapPoint } from "./snap.ts"
@@ -53,6 +63,13 @@ type VectorCase = {
     text?: string
     angleDeg?: number
     t?: number
+    keep?: "left" | "right" | "center"
+    otherId?: string
+    distance?: number
+    edge?: "start" | "end"
+    amountM?: number
+    items?: { kind: SelectionKind; id: string }[]
+    free?: boolean
   }
   expect: {
     areas?: { id: string; area: number }[]
@@ -85,7 +102,108 @@ type VectorCase = {
     wallCount?: number
     rotationDeg?: number
     text?: string
+    error?: boolean
+    unchanged?: boolean
+    wallThickness?: { wallId: string; thickness: number }
+    clear?: { wallId: string; otherId: string; distance: number; tolerance: number }
+    opening?: { id: string; wall: string; width: number; tolerance: number; startEdge?: Point; center?: Point }
+    fixture?: { id: string; x: number; y: number; rotationDeg: number; tolerance: number }
   }
+}
+
+const gripOps: Record<string, (vector: VectorCase) => Plan> = {
+  setWallThicknessFromFace: (v) => setWallThicknessFromFace(v.input.plan, v.input.levelId, v.input.wallId ?? "", v.input.thickness ?? 0, v.input.keep ?? "center"),
+  setClearDistance: (v) => setClearDistance(v.input.plan, v.input.levelId, v.input.wallId ?? "", v.input.otherId ?? "", v.input.distance ?? 0),
+  setOpeningEdge: (v) => setOpeningEdge(v.input.plan, v.input.levelId, v.input.openingId ?? "", v.input.edge ?? "end", v.input.amountM ?? 0),
+  rehostOpening: (v) => rehostOpening(v.input.plan, v.input.levelId, v.input.openingId ?? "", v.input.wallId ?? "", v.input.point ?? { x: 0, y: 0 }),
+  moveSelection: (v) => moveSelection(v.input.plan, v.input.levelId, v.input.items ?? [], v.input.delta ?? { x: 0, y: 0 }),
+  snapFixtureToWall: (v) => snapFixtureToWall(v.input.plan, v.input.levelId, v.input.fixtureId ?? "", v.input.toleranceM ?? 0),
+}
+
+function assertGrip(vector: VectorCase) {
+  const before = JSON.stringify(vector.input.plan)
+  const run = gripOps[vector.op]
+  if (!run) {
+    throw new Error(`unknown grip op ${vector.op}`)
+  }
+  if (vector.expect.error) {
+    expect(() => run(vector)).toThrow()
+    if (vector.expect.unchanged) {
+      expect(JSON.stringify(vector.input.plan)).toBe(before)
+    }
+    return
+  }
+  const next = run(vector)
+  expect(JSON.stringify(vector.input.plan)).toBe(before)
+  const level = levelOf(next, vector.input.levelId)
+  if (vector.expect.areas) {
+    assertAreas(
+      vector,
+      extractRooms(next, vector.input.levelId).rooms.map((room) => ({ id: room.id, area: room.area })),
+    )
+  }
+  if (vector.expect.wallThickness) {
+    const wall = level.walls.find((item) => item.id === vector.expect.wallThickness?.wallId)
+    expect(wall?.thickness).toBe(vector.expect.wallThickness.thickness)
+  }
+  if (vector.expect.clear) {
+    const { wallId, otherId, distance, tolerance } = vector.expect.clear
+    expect(Math.abs(clearBetween(next, vector.input.levelId, wallId, otherId) - distance)).toBeLessThanOrEqual(tolerance)
+  }
+  if (vector.expect.opening) {
+    const expected = vector.expect.opening
+    const opening = level.openings.find((item) => item.id === expected.id)
+    expect(opening?.wall).toBe(expected.wall)
+    expect(Math.abs((opening?.width ?? 0) - expected.width)).toBeLessThanOrEqual(expected.tolerance)
+    const ends = openingEdges(next, vector.input.levelId, expected.id)
+    if (expected.startEdge) {
+      expect(Math.hypot(ends.start.x - expected.startEdge.x, ends.start.y - expected.startEdge.y)).toBeLessThanOrEqual(expected.tolerance)
+    }
+    if (expected.center) {
+      expect(Math.hypot(ends.center.x - expected.center.x, ends.center.y - expected.center.y)).toBeLessThanOrEqual(expected.tolerance)
+    }
+  }
+  if (vector.expect.fixture) {
+    const expected = vector.expect.fixture
+    const fixture = level.fixtures.find((item) => item.id === expected.id)
+    expect(Math.abs((fixture?.x ?? Number.NaN) - expected.x)).toBeLessThanOrEqual(expected.tolerance)
+    expect(Math.abs((fixture?.y ?? Number.NaN) - expected.y)).toBeLessThanOrEqual(expected.tolerance)
+    expect(Math.abs((fixture?.rotationDeg ?? Number.NaN) - expected.rotationDeg)).toBeLessThanOrEqual(expected.tolerance)
+  }
+  assertMoved(vector, next)
+}
+
+function clearBetween(plan: Plan, levelId: string, wallId: string, otherId: string): number {
+  const level = levelOf(plan, levelId)
+  const verts = vertexMap(plan, levelId)
+  const wall = level.walls.find((item) => item.id === wallId)
+  const other = level.walls.find((item) => item.id === otherId)
+  const a = verts.get(wall?.a ?? "")
+  const b = verts.get(wall?.b ?? "")
+  const c = verts.get(other?.a ?? "")
+  if (!wall || !other || !a || !b || !c) {
+    throw new Error("missing walls for clear distance")
+  }
+  const length = Math.hypot(b.x - a.x, b.y - a.y)
+  const normal = { x: -(b.y - a.y) / length, y: (b.x - a.x) / length }
+  const d = (c.x - a.x) * normal.x + (c.y - a.y) * normal.y
+  return Math.abs(d) - wall.thickness / 2 - other.thickness / 2
+}
+
+function openingEdges(plan: Plan, levelId: string, openingId: string): { start: Point; center: Point } {
+  const level = levelOf(plan, levelId)
+  const verts = vertexMap(plan, levelId)
+  const opening = level.openings.find((item) => item.id === openingId)
+  const wall = level.walls.find((item) => item.id === opening?.wall)
+  const a = verts.get(wall?.a ?? "")
+  const b = verts.get(wall?.b ?? "")
+  if (!opening || !a || !b) {
+    throw new Error("missing opening")
+  }
+  const length = Math.hypot(b.x - a.x, b.y - a.y)
+  const along = { x: (b.x - a.x) / length, y: (b.y - a.y) / length }
+  const center = { x: a.x + (b.x - a.x) * opening.offset, y: a.y + (b.y - a.y) * opening.offset }
+  return { start: { x: center.x - (along.x * opening.width) / 2, y: center.y - (along.y * opening.width) / 2 }, center }
 }
 
 const vectorDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../shared/vectors")
@@ -474,6 +592,14 @@ describe("shared vectors", () => {
         const next = setTextContent(vector.input.plan, vector.input.levelId, vector.input.textId ?? "", vector.input.text ?? "")
         const text = levelOf(next, vector.input.levelId).texts.find((item) => item.id === vector.input.textId)
         expect(text?.text).toBe(vector.expect.text)
+        return
+      }
+      if (vector.op === "snapRotation") {
+        expect(snapRotation(vector.input.rotationDeg ?? Number.NaN, vector.input.free ?? false)).toBe(vector.expect.rotationDeg)
+        return
+      }
+      if (vector.op in gripOps) {
+        assertGrip(vector)
         return
       }
       throw new Error(`unknown op ${vector.op}`)

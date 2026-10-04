@@ -121,6 +121,17 @@ export default function Editor({
         event.preventDefault()
         useEditor.getState().deleteSelection()
       }
+      const arrows: Record<string, { x: number; y: number }> = {
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 },
+        ArrowUp: { x: 0, y: 1 },
+        ArrowDown: { x: 0, y: -1 },
+      }
+      const arrow = arrows[event.key]
+      if (arrow) {
+        event.preventDefault()
+        useEditor.getState().nudge(arrow, event.shiftKey ? 10 : 1)
+      }
       const meta = event.ctrlKey || event.metaKey
       if (meta && event.key.toLowerCase() === "z" && !event.shiftKey) {
         event.preventDefault()

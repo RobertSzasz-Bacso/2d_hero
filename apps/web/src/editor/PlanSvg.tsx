@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react"
 import type { Level, Plan, Point } from "@/core/plan-types.ts"
+import { extractRooms } from "@/core/rooms.ts"
 import { editorTolerances } from "@/core/tolerances.ts"
 import { wallPolygons } from "@/core/wall-polygons.ts"
 import { buildScene, openingRect, placeSymbol, type SceneElement, type SceneItem } from "@/drawing/scene.ts"
@@ -29,6 +30,7 @@ export type PlanSvgProps = {
   onVertexDown: (vertexId: string, event: React.PointerEvent) => void
   onDimensionText: (dimensionId: string, segmentIndex: number, at: Point) => void
   onHover: (element: SceneElement | null) => void
+  children?: React.ReactNode
 }
 
 type Stroke = Extract<SceneItem, { type: "stroke" }>
@@ -188,7 +190,7 @@ function PlanSvg(props: PlanSvgProps) {
           style={{ cursor: "move" }}
           {...hoverHandlers(element)}
         >
-          {rect ? <path d={pathOf(camera, rect, true)} fill="#fff" fillOpacity={0} stroke="none" pointerEvents="all" /> : null}
+          {rect ? <path d={pathOf(camera, rect, true)} fill="#fff" fillOpacity={0} stroke="none" pointerEvents="all" data-hit="opening" /> : null}
           {items.map((item, index) => (item.type === "stroke" ? hitStroke(item, index) : null))}
           {items.map((item, index) => (item.type === "stroke" ? strokeNode(item, index, color) : null))}
         </g>,
@@ -324,6 +326,15 @@ function PlanSvg(props: PlanSvgProps) {
       overlays.push(<path key={`center-${polygon.wallId}`} d={pathOf(camera, [a, b], false)} fill="none" stroke={SELECT_COLOR} strokeWidth={1} strokeDasharray="6 4" pointerEvents="none" />)
     }
   }
+  if (selection.some((item) => item.kind === "room")) {
+    for (const room of extractRooms(plan, level.id).rooms) {
+      if (selectedKeys.has(`room:${room.id}`)) {
+        overlays.push(
+          <path key={`room-${room.id}`} d={pathOf(camera, room.polygon, true)} fill={SELECT_COLOR} fillOpacity={0.06} stroke={SELECT_COLOR} strokeWidth={1.5} strokeDasharray="6 4" pointerEvents="none" />,
+        )
+      }
+    }
+  }
   if (preview) {
     const previewLevel = preview.levels.find((item) => item.id === level.id) ?? preview.levels[0]
     if (previewLevel) {
@@ -374,6 +385,7 @@ function PlanSvg(props: PlanSvgProps) {
           />
         )
       })}
+      {props.children}
     </svg>
   )
 }

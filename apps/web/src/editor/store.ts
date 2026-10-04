@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { suppressDimension, syncAutoDimensions } from "@/core/dimensions.ts"
 import { copySelection as copyItems, pasteClipboard, type Clipboard } from "@/core/draw.ts"
+import { moveSelection } from "@/core/grips.ts"
 import { PlanHistory } from "@/core/history.ts"
 import { removeSelection } from "@/core/ops.ts"
 import type { Fixture, Plan, Point } from "@/core/plan-types.ts"
@@ -73,6 +74,7 @@ type EditorState = {
   undo: () => void
   redo: () => void
   deleteSelection: () => void
+  nudge: (direction: Point, steps: number) => void
   scheduleSave: () => void
   saveNow: () => void
   setTool: (tool: EditorTool) => void
@@ -270,6 +272,15 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     get().commit(next)
     set({ selection: [] })
+  },
+  nudge: (direction, steps) => {
+    const { history, selection, activeLevelId, gridM } = get()
+    const id = history ? levelId(history.plan, activeLevelId) : null
+    if (!history || !id || selection.length === 0 || !(gridM > 0)) {
+      return
+    }
+    const step = gridM * steps
+    get().commit(moveSelection(history.plan, id, selection, { x: direction.x * step, y: direction.y * step }))
   },
   setTool: (tool) =>
     set({

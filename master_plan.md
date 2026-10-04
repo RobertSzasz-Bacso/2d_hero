@@ -34,7 +34,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 15 — AI assistant — `done`
 - [x] Phase 16 — Hardening and release — `done`
 - [x] Phase 17 — Architectural plan view — `done`
-- [ ] Phase 18 — Direct editing with grips — `not started`
+- [x] Phase 18 — Direct editing with grips — `done`
 - [ ] Phase 19 — Drawing tools — `not started`
 - [ ] Phase 20 — Optional machine-learning detectors — `not started`
 
@@ -816,7 +816,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-17
 
 ## Phase 18 — Direct editing with grips
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 17 done.
 
