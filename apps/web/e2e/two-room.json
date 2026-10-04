@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 2,
+  "units": "m",
+  "revision": 0,
+  "project": { "name": "Two rooms", "address": "", "northAngleDeg": 0 },
+  "sheet": {
+    "paper": "A3",
+    "orientation": "landscape",
+    "scale": 50,
+    "titleBlock": {
+      "company": "",
+      "project": "Two rooms",
+      "address": "",
+      "drawnBy": "",
+      "date": "",
+      "sheetTitle": "Ground floor",
+      "sheetNumber": "01",
+      "revisionNote": ""
+    }
+  },
+  "detection": { "source": null, "issues": [] },
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Ground floor",
+      "elevation": 0,
+      "ceilingHeight": 2.7,
+      "vertices": [
+        { "id": "vSW", "x": 0, "y": 0 },
+        { "id": "vSE", "x": 8, "y": 0 },
+        { "id": "vNE", "x": 8, "y": 5 },
+        { "id": "vNW", "x": 0, "y": 5 },
+        { "id": "vMS", "x": 4, "y": 0 },
+        { "id": "vMN", "x": 4, "y": 5 }
+      ],
+      "walls": [
+        { "id": "wSouth", "a": "vSW", "b": "vSE", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+        { "id": "wEast", "a": "vSE", "b": "vNE", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+        { "id": "wNorth", "a": "vNE", "b": "vNW", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+        { "id": "wWest", "a": "vNW", "b": "vSW", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+        { "id": "wSplit", "a": "vMS", "b": "vMN", "thickness": 0.12, "kind": "interior", "confidence": 1 }
+      ],
+      "openings": [
+        {
+          "id": "o1",
+          "wall": "wEast",
+          "kind": "door",
+          "offset": 0.5,
+          "width": 0.9,
+          "sill": 0,
+          "head": 2.1,
+          "swing": "left",
+          "swingSide": "positive",
+          "confidence": 1
+        }
+      ],
+      "columns": [],
+      "stairs": [],
+      "rooms": [
+        { "id": "rLeft", "name": "Left", "number": "01", "seed": { "x": 2, "y": 2.5 } },
+        { "id": "rRight", "name": "Right", "number": "02", "seed": { "x": 6, "y": 2.5 } }
+      ],
+      "separators": [],
+      "fixtures": [],
+      "texts": [],
+      "dimensions": [],
+      "suppressedAutoDimensions": []
+    }
+  ]
+}

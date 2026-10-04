@@ -4,7 +4,17 @@ import { fileURLToPath } from "node:url"
 import { intersection } from "polygon-clipping"
 import { describe, expect, it } from "vitest"
 import type { Plan, Point } from "./plan-types.ts"
-import { applyTypedDimension, moveVertex, moveWall, setOpening, setRoomName, setWallThickness } from "./ops.ts"
+import {
+  applyTypedDimension,
+  moveVertex,
+  moveWall,
+  removeSelection,
+  setFixtureRotation,
+  setOpening,
+  setRoomName,
+  setTextContent,
+  setWallThickness,
+} from "./ops.ts"
 import { pickAt } from "./pick.ts"
 import { extractRooms } from "./rooms.ts"
 import { snapPoint } from "./snap.ts"
@@ -35,6 +45,11 @@ type VectorCase = {
     gridM?: number
     previous?: { x: number; y: number; dirX: number; dirY: number }
     toleranceM?: number
+    ids?: string[]
+    fixtureId?: string
+    rotationDeg?: number
+    textId?: string
+    text?: string
   }
   expect: {
     areas?: { id: string; area: number }[]
@@ -64,6 +79,9 @@ type VectorCase = {
     vertexId?: string
     firstKind?: string
     firstId?: string
+    wallCount?: number
+    rotationDeg?: number
+    text?: string
   }
 }
 
@@ -409,6 +427,28 @@ describe("shared vectors", () => {
         const hits = pickAt(vector.input.plan, vector.input.levelId, vector.input.point ?? { x: 0, y: 0 }, vector.input.toleranceM ?? 0)
         expect(hits[0]?.kind).toBe(vector.expect.firstKind)
         expect(hits[0]?.id).toBe(vector.expect.firstId)
+        return
+      }
+      if (vector.op === "removeSelection") {
+        const next = removeSelection(vector.input.plan, vector.input.levelId, vector.input.ids ?? [])
+        expect(levelOf(next, vector.input.levelId).walls).toHaveLength(vector.expect.wallCount ?? -1)
+        return
+      }
+      if (vector.op === "setFixtureRotation") {
+        const next = setFixtureRotation(
+          vector.input.plan,
+          vector.input.levelId,
+          vector.input.fixtureId ?? "",
+          vector.input.rotationDeg ?? 0,
+        )
+        const fixture = levelOf(next, vector.input.levelId).fixtures.find((item) => item.id === vector.input.fixtureId)
+        expect(fixture?.rotationDeg).toBe(vector.expect.rotationDeg)
+        return
+      }
+      if (vector.op === "setText") {
+        const next = setTextContent(vector.input.plan, vector.input.levelId, vector.input.textId ?? "", vector.input.text ?? "")
+        const text = levelOf(next, vector.input.levelId).texts.find((item) => item.id === vector.input.textId)
+        expect(text?.text).toBe(vector.expect.text)
         return
       }
       throw new Error(`unknown op ${vector.op}`)

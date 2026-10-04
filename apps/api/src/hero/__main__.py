@@ -6,6 +6,7 @@ import logging
 import secrets
 import socket
 import webbrowser
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -22,6 +23,9 @@ def main(argv: list[str] | None = None) -> None:
     """Bind the local server and open the browser at the session fragment."""
     parser = argparse.ArgumentParser(prog="hero")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--projects-dir", type=Path, default=None)
+    parser.add_argument("--config-dir", type=Path, default=None)
+    parser.add_argument("--session-file", type=Path, default=None)
     parser.add_argument(
         "--no-browser",
         action="store_true",
@@ -31,8 +35,9 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     token = secrets.token_urlsafe(32)
-    config_dir = app_config_dir()
-    session_file = default_session_file()
+    config_dir = args.config_dir.resolve() if args.config_dir else app_config_dir()
+    projects_dir = args.projects_dir.resolve() if args.projects_dir else default_projects_dir()
+    session_file = args.session_file.resolve() if args.session_file else default_session_file()
     write_token(config_dir / "session.token", token)
     write_token(session_file, token)
     logger.info("Session token stored")
@@ -40,7 +45,7 @@ def main(argv: list[str] | None = None) -> None:
     app = create_app(
         token=token,
         config_dir=config_dir,
-        projects_dir=default_projects_dir(),
+        projects_dir=projects_dir,
         session_file=session_file,
         dist_dir=web_dist(),
         open_file=ask_open_file,

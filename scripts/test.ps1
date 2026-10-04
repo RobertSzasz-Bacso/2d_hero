@@ -32,6 +32,14 @@ if ($runWeb) {
     if ($LASTEXITCODE -ne 0) {
       exit $LASTEXITCODE
     }
+    npx playwright install chromium
+    if ($LASTEXITCODE -ne 0) {
+      exit $LASTEXITCODE
+    }
+    npx playwright test
+    if ($LASTEXITCODE -ne 0) {
+      exit $LASTEXITCODE
+    }
   } finally {
     Pop-Location
   }

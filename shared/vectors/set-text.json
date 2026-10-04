@@ -1,0 +1,51 @@
+{
+  "name": "set-text",
+  "op": "setText",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": { "name": "Text", "address": "", "northAngleDeg": 0 },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": { "source": null, "issues": [] },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [{ "id": "t1", "x": 1, "y": 1, "text": "Note", "heightM": 0.2 }],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "textId": "t1",
+    "text": "Kitchen"
+  },
+  "expect": { "text": "Kitchen" }
+}

@@ -274,3 +274,66 @@ export function applyTypedDimension(
   }
   return next
 }
+
+export function setFixtureRotation(plan: Plan, levelId: string, fixtureId: string, rotationDeg: number): Plan {
+  if (!Number.isFinite(rotationDeg)) {
+    throw new Error("Rotation must be finite")
+  }
+  const next = clonePlan(plan)
+  const fixture = levelOf(next, levelId).fixtures.find((item) => item.id === fixtureId)
+  if (!fixture) {
+    throw new Error(`Unknown fixture ${fixtureId}`)
+  }
+  fixture.rotationDeg = rotationDeg
+  return next
+}
+
+export function setTextContent(plan: Plan, levelId: string, textId: string, text: string): Plan {
+  const next = clonePlan(plan)
+  const item = levelOf(next, levelId).texts.find((entry) => entry.id === textId)
+  if (!item) {
+    throw new Error(`Unknown text ${textId}`)
+  }
+  item.text = text
+  return next
+}
+
+export function removeSelection(plan: Plan, levelId: string, ids: readonly string[]): Plan {
+  const drop = new Set(ids)
+  const next = clonePlan(plan)
+  const level = levelOf(next, levelId)
+  const removedWalls = new Set(
+    level.walls.filter((wall) => drop.has(wall.id) || drop.has(wall.a) || drop.has(wall.b)).map((wall) => wall.id),
+  )
+  level.walls = level.walls.filter((wall) => !removedWalls.has(wall.id))
+  level.openings = level.openings.filter((opening) => !drop.has(opening.id) && !removedWalls.has(opening.wall))
+  level.columns = level.columns.filter((column) => !drop.has(column.id))
+  level.stairs = level.stairs.filter((stair) => !drop.has(stair.id))
+  level.fixtures = level.fixtures.filter((fixture) => !drop.has(fixture.id))
+  level.texts = level.texts.filter((text) => !drop.has(text.id))
+  level.rooms = level.rooms.filter((room) => !drop.has(room.id))
+  level.separators = level.separators.filter(
+    (separator) => !drop.has(separator.id) && !drop.has(separator.a) && !drop.has(separator.b),
+  )
+  const used = new Set<string>()
+  for (const wall of level.walls) {
+    used.add(wall.a)
+    used.add(wall.b)
+  }
+  for (const separator of level.separators) {
+    used.add(separator.a)
+    used.add(separator.b)
+  }
+  level.vertices = level.vertices.filter((vertex) => !drop.has(vertex.id) && used.has(vertex.id))
+  level.dimensions = level.dimensions.filter((dimension) =>
+    dimension.segments.every((segment) => referenceExists(level, segment.a) && referenceExists(level, segment.b)),
+  )
+  return next
+}
+
+function referenceExists(level: Level, ref: DimensionRef): boolean {
+  if (ref.type === "vertex") {
+    return level.vertices.some((vertex) => vertex.id === ref.id)
+  }
+  return level.openings.some((opening) => opening.id === ref.id)
+}

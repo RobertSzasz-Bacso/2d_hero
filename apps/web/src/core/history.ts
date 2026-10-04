@@ -44,6 +44,25 @@ export class PlanHistory {
     this.record(base, this.current)
   }
 
+  cancel(): void {
+    if (!this.transactionBase) {
+      return
+    }
+    this.current = this.transactionBase
+    this.transactionBase = null
+  }
+
+  setRevision(revision: number): void {
+    this.current = { ...this.current, revision }
+  }
+
+  reset(plan: Plan): void {
+    this.current = plan
+    this.undoStack = []
+    this.redoStack = []
+    this.transactionBase = null
+  }
+
   undo(): void {
     const step = this.undoStack.pop()
     if (!step) {

@@ -44,6 +44,7 @@ export function snapPoint(input: {
   pixelsPerMeter: number
   gridM?: number
   previous?: { x: number; y: number; dirX: number; dirY: number }
+  excludeVertexIds?: readonly string[]
 }): SnapHit | null {
   if (!(input.pixelsPerMeter > 0)) {
     return null
@@ -53,7 +54,11 @@ export function snapPoint(input: {
   const vertices = new Map(level.vertices.map((vertex) => [vertex.id, vertex]))
   const candidates: Candidate[] = []
 
+  const excluded = new Set(input.excludeVertexIds ?? [])
   for (const vertex of level.vertices) {
+    if (excluded.has(vertex.id)) {
+      continue
+    }
     consider(candidates, "vertex", vertex, input.cursor, tolerance, vertex.id)
   }
 

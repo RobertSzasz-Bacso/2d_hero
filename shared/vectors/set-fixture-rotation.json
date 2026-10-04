@@ -1,0 +1,63 @@
+{
+  "name": "set-fixture-rotation",
+  "op": "setFixtureRotation",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": { "name": "Fixture", "address": "", "northAngleDeg": 0 },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": { "source": null, "issues": [] },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [],
+          "walls": [],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [
+            {
+              "id": "f1",
+              "symbol": "toilet",
+              "x": 1,
+              "y": 1,
+              "rotationDeg": 0,
+              "width": 0.4,
+              "depth": 0.7,
+              "confidence": 1,
+              "role": "fixture"
+            }
+          ],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "fixtureId": "f1",
+    "rotationDeg": 90
+  },
+  "expect": { "rotationDeg": 90 }
+}

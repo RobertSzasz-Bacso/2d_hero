@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const sessionFile = path.resolve(rootDir, "../api/.session-token");
+const sessionFile = process.env.HERO_SESSION_FILE
+  ? path.resolve(process.env.HERO_SESSION_FILE)
+  : path.resolve(rootDir, "../api/.session-token");
+const apiPort = process.env.HERO_API_PORT ?? "8000";
 
 function sessionToken(): string {
   try {
@@ -28,7 +31,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {

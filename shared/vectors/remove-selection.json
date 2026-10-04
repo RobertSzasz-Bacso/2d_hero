@@ -1,0 +1,60 @@
+{
+  "name": "remove-selection",
+  "op": "removeSelection",
+  "input": {
+    "plan": {
+      "schemaVersion": 2,
+      "units": "m",
+      "revision": 0,
+      "project": { "name": "Delete", "address": "", "northAngleDeg": 0 },
+      "sheet": {
+        "paper": "A3",
+        "orientation": "landscape",
+        "scale": 50,
+        "titleBlock": {
+          "company": "",
+          "project": "",
+          "address": "",
+          "drawnBy": "",
+          "date": "",
+          "sheetTitle": "",
+          "sheetNumber": "",
+          "revisionNote": ""
+        }
+      },
+      "detection": { "source": null, "issues": [] },
+      "levels": [
+        {
+          "id": "L1",
+          "name": "Ground floor",
+          "elevation": 0,
+          "ceilingHeight": 2.7,
+          "vertices": [
+            { "id": "v1", "x": 0, "y": 0 },
+            { "id": "v2", "x": 5, "y": 0 },
+            { "id": "v3", "x": 5, "y": 4 },
+            { "id": "v4", "x": 0, "y": 4 }
+          ],
+          "walls": [
+            { "id": "w1", "a": "v1", "b": "v2", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+            { "id": "w2", "a": "v2", "b": "v3", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+            { "id": "w3", "a": "v3", "b": "v4", "thickness": 0.2, "kind": "exterior", "confidence": 1 },
+            { "id": "w4", "a": "v4", "b": "v1", "thickness": 0.2, "kind": "exterior", "confidence": 1 }
+          ],
+          "openings": [],
+          "columns": [],
+          "stairs": [],
+          "rooms": [],
+          "separators": [],
+          "fixtures": [],
+          "texts": [],
+          "dimensions": [],
+          "suppressedAutoDimensions": []
+        }
+      ]
+    },
+    "levelId": "L1",
+    "ids": ["w1"]
+  },
+  "expect": { "wallCount": 3 }
+}

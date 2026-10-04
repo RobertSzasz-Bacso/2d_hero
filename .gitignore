@@ -10,6 +10,7 @@ apps/web/node_modules/
 apps/web/dist/
 apps/web/test-results/
 apps/web/playwright-report/
+apps/web/e2e/.tmp/
 apps/web/blob-report/
 *.log
 .DS_Store
