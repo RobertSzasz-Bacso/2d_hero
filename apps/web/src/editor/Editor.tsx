@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { Button } from "@/components/ui/button.tsx"
 import type { Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
+import ExportDialog from "./ExportDialog.tsx"
 import PlanCanvas from "./PlanCanvas.tsx"
 import PropertiesPanel from "./PropertiesPanel.tsx"
 import Shortcuts from "./Shortcuts.tsx"
@@ -143,6 +144,7 @@ export default function Editor({ projectId, onClose }: { projectId: string; onCl
         <Button type="button" variant="outline" data-testid="fit" onClick={() => useEditor.getState().fit()}>
           Fit
         </Button>
+        <ExportDialog />
       </header>
       {saveError ? (
         <p role="alert" className="bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="save-error">
