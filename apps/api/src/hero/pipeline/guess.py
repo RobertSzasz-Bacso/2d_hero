@@ -35,8 +35,17 @@ def guess_source(path: Path) -> dict[str, str]:
     else:
         units = "m"
     size = maximum - minimum
-    axis = "xyz"[int(np.argmin(size))]
+    # glTF point clouds are Y-up. A nearly cubic room makes the shortest side a bad guess.
+    if scene.source_format in {"glb", "gltf"} and not _has_faces(scene):
+        axis = "y"
+    else:
+        axis = "xyz"[int(np.argmin(size))]
     return {"units": units, "upAxis": axis}
+
+
+def _has_faces(scene: object) -> bool:
+    faces = getattr(scene, "mesh_faces", None)
+    return faces is not None and len(faces) > 0
 
 
 def _units_from_scale(scale: float) -> str:

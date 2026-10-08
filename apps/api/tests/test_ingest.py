@@ -109,6 +109,75 @@ def test_synthetic_format_loads(name: str) -> None:
     assert len(result.points) > 10
 
 
+def test_glb_point_cloud_uses_vertices_and_node_transform(tmp_path: Path) -> None:
+    import trimesh
+
+    from hero.pipeline.guess import guess_source
+
+    points = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 2.0, 0.0]], dtype=np.float64)
+    cloud = trimesh.PointCloud(points)
+    scene = trimesh.Scene()
+    scene.add_geometry(
+        cloud,
+        transform=trimesh.transformations.translation_matrix([10.0, 0.0, 0.0]),
+    )
+    path = tmp_path / "cloud.glb"
+    path.write_bytes(scene.export(file_type="glb"))
+
+    loaded = read_source(path)
+    assert loaded.points is not None
+    assert len(loaded.points) == 3
+    assert loaded.mesh_faces is None
+    assert float(loaded.points[:, 0].min()) == pytest.approx(10.0)
+    assert float(loaded.points[:, 0].max()) == pytest.approx(11.0)
+    assert float(loaded.points[:, 1].max()) == pytest.approx(2.0)
+    assert guess_source(path)["units"] == "m"
+
+
+def test_point_cloud_glb_uses_gltf_up_axis(tmp_path: Path) -> None:
+    import trimesh
+
+    from hero.pipeline.guess import guess_source
+
+    # X is the shortest side. A glTF point cloud is still Y-up.
+    points = np.array(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 2.0]],
+        dtype=np.float64,
+    )
+    path = tmp_path / "cloud.glb"
+    path.write_bytes(trimesh.Scene(trimesh.PointCloud(points)).export(file_type="glb"))
+    assert guess_source(path)["upAxis"] == "y"
+
+    mesh = tmp_path / "box.glb"
+    box = trimesh.creation.box(extents=(1.0, 3.0, 2.0))
+    mesh.write_bytes(trimesh.Scene(box).export(file_type="glb"))
+    assert guess_source(mesh)["upAxis"] == "x"
+
+
+def test_glb_point_cloud_keeps_vertex_colors(tmp_path: Path) -> None:
+    import trimesh
+
+    points = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float64)
+    colors = np.array([[255, 0, 0, 255], [0, 0, 255, 255]], dtype=np.uint8)
+    cloud = trimesh.PointCloud(points, colors=colors)
+    path = tmp_path / "colored.glb"
+    path.write_bytes(trimesh.Scene(cloud).export(file_type="glb"))
+
+    loaded = read_source(path)
+    assert loaded.colors is not None
+    assert loaded.colors.shape == (2, 3)
+    assert loaded.colors[0].tolist() == [255, 0, 0]
+    assert loaded.colors[1].tolist() == [0, 0, 255]
+
+    result = normalize_scene(loaded, units="m", up_axis="z")
+    assert result.colors is not None
+    assert len(result.colors) == len(result.points)
+    assert sorted(tuple(int(channel) for channel in row) for row in result.colors) == [
+        (0, 0, 255),
+        (255, 0, 0),
+    ]
+
+
 def test_e57_pose_is_applied(tmp_path: Path) -> None:
     from pye57 import E57
 

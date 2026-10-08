@@ -17,6 +17,7 @@ class RawScene:
     source_format: str
     mesh_vertices: np.ndarray | None = None
     mesh_faces: np.ndarray | None = None
+    colors: np.ndarray | None = None
 
     def has_geometry(self) -> bool:
         """True when the file yielded a mesh, points, or a point-cloud stream."""

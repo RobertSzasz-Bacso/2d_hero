@@ -94,7 +94,7 @@ There is no PDF route.
 
 The import screen shows the guessed units and up axis before the job starts. The user can override both. `auto` runs the guess in `docs/algorithms.md`.
 
-Preview mesh: decimate to at most 200_000 triangles, write `preview.glb`. Point preview: at most 500_000 points, float32 XYZ, little-endian, with a 16-byte header `HEROPTS` plus `uint32` count. The 3D panel uses react-three-fiber, fits the camera to the bounds, and draws the cut plane at 1.20 m above the active floor. The panel can be hidden.
+Preview mesh: decimate to at most 200_000 triangles, write `preview.glb`. Point preview: at most 500_000 points, float32 XYZ, little-endian, with a 16-byte header `HEROPTS`, a `uint32` count, and a `uint32` flags word. Flags `1` means uint8 RGB follows the positions, one color per point. The 3D panel uses react-three-fiber, fits the camera to the bounds, and draws the cut plane at 1.20 m above the active floor. The panel can be hidden.
 
 Underlays are images. They are never converted into walls by the editor.
 

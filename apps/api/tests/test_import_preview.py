@@ -74,6 +74,33 @@ def test_preview_glb_has_fewer_triangles_than_a_dense_source(
     assert len(loaded.faces) > 0
 
 
+def test_point_preview_stores_rgb(tmp_path: Path) -> None:
+    points = np.array([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], dtype=np.float64)
+    colors = np.array([[255, 0, 0], [0, 128, 255]], dtype=np.uint8)
+    result = Normalized(
+        points=points,
+        normals=np.zeros((2, 3)),
+        unit_scale=1.0,
+        voxel=0.02,
+        estimated_up=np.array([0.0, 0.0, 1.0]),
+        levels=[],
+        manhattan_angle_deg=0.0,
+        colors=colors,
+    )
+    write_preview(tmp_path / "empty.glb", tmp_path, result)
+    blob = (tmp_path / "preview.pts").read_bytes()
+    count = int(np.frombuffer(blob[8:12], dtype="<u4")[0])
+    flags = int(np.frombuffer(blob[12:16], dtype="<u4")[0])
+    assert blob[:8] == b"HEROPTS\x00"
+    assert count == 2
+    assert flags == 1
+    positions = np.frombuffer(blob[16 : 16 + count * 12], dtype="<f4").reshape(count, 3)
+    stored = np.frombuffer(blob[16 + count * 12 :], dtype=np.uint8).reshape(count, 3)
+    assert positions[1].tolist() == pytest.approx([1.0, 2.0, 3.0])
+    assert stored[0].tolist() == [255, 0, 0]
+    assert stored[1].tolist() == [0, 128, 255]
+
+
 def test_user_ruined_building_opens_when_present() -> None:
     if not USER_GLB.is_file():
         pytest.skip("samples/user/two_social_rooms_in_a_ruined_building.glb is missing")

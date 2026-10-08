@@ -55,7 +55,7 @@ Each reader yields a `RawScene`: points `(N, 3)` in the file's own units and axi
 
 | Format | Reader | Notes |
 | --- | --- | --- |
-| OBJ, GLB, glTF | trimesh | Bake transforms. A scene becomes one mesh. |
+| OBJ, GLB, glTF | trimesh | Bake transforms. A scene of meshes becomes one mesh. A scene of point clouds stays points. Point-cloud glTF is Y-up. |
 | USDZ | `pxr` (`usd-core`) | Open the crate. Read `UsdGeom.Mesh`. Apply `metersPerUnit` and the full xform. Do not use regular expressions. USDA and USDC both go through `pxr`. |
 | PLY | trimesh | Mesh if it has faces, otherwise points. |
 | E57 | pye57 | Read every scan. Apply the scan translation and rotation. Skip a scan with no Cartesian points. |

@@ -3,11 +3,16 @@ import { Canvas, useThree } from "@react-three/fiber"
 import { useEffect, useState } from "react"
 import * as THREE from "three"
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
+import { Button } from "@/components/ui/button.tsx"
 import { Spinner } from "@/components/Busy.tsx"
 import { heroFetch } from "@/session.ts"
+import { parsePointPreview, pointCloudObject } from "./point-preview.ts"
+import { useEditor } from "./store.ts"
 
 export default function View3D({ projectId, elevation }: { projectId: string; elevation: number }) {
-  const [scene, setScene] = useState<THREE.Group | null>(null)
+  const [scene, setScene] = useState<THREE.Object3D | null>(null)
+  const [preview, setPreview] = useState<"mesh" | "points" | null>(null)
+  const [colored, setColored] = useState(false)
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
 
   useEffect(() => {
@@ -15,27 +20,40 @@ export default function View3D({ projectId, elevation }: { projectId: string; el
     let objectUrl: string | null = null
     setStatus("loading")
     setScene(null)
+    setPreview(null)
+    setColored(false)
     heroFetch(`/api/projects/${projectId}/preview`)
       .then(async (response) => {
         if (!response.ok) {
           return null
         }
-        const blob = await response.blob()
-        if (blob.type.includes("json") || blob.size < 16) {
+        const type = response.headers.get("content-type") ?? ""
+        if (type.includes("json")) {
           return null
         }
-        objectUrl = URL.createObjectURL(blob)
-        return new GLTFLoader().loadAsync(objectUrl)
+        const buffer = await response.arrayBuffer()
+        const parsed = parsePointPreview(buffer)
+        if (parsed) {
+          return pointCloudObject(parsed.positions, parsed.colors)
+        }
+        if (buffer.byteLength < 16) {
+          return null
+        }
+        objectUrl = URL.createObjectURL(new Blob([buffer], { type: "model/gltf-binary" }))
+        const gltf = await new GLTFLoader().loadAsync(objectUrl)
+        return gltf.scene
       })
-      .then((gltf) => {
+      .then((object) => {
         if (!active) {
           return
         }
-        if (!gltf) {
+        if (!object) {
           setStatus("error")
           return
         }
-        setScene(gltf.scene)
+        setScene(object)
+        setPreview(object.name === "point-preview" ? "points" : "mesh")
+        setColored(object.userData.colored === true)
         setStatus("ready")
       })
       .catch(() => {
@@ -52,7 +70,21 @@ export default function View3D({ projectId, elevation }: { projectId: string; el
   }, [projectId])
 
   return (
-    <div data-testid="view-3d" className="relative h-72 w-80 shrink-0 border-l border-slate-200 bg-slate-900">
+    <div
+      data-testid="view-3d"
+      data-preview={preview ?? undefined}
+      data-colored={colored ? "true" : "false"}
+      className="fixed inset-0 z-40 bg-slate-900"
+    >
+      <Button
+        type="button"
+        variant="outline"
+        className="absolute top-3 right-3 z-20"
+        data-testid="close-3d"
+        onClick={() => useEditor.getState().setShow3d(false)}
+      >
+        Close
+      </Button>
       {status === "loading" ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center text-slate-200">
           <Spinner className="size-6" />

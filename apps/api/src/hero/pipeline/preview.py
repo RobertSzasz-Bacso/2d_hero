@@ -27,7 +27,10 @@ def write_preview(source: Path, folder: Path, result: Normalized) -> Path:
             points.unlink()
         return path
     path = folder / "preview.pts"
-    atomic_write_bytes(path, _point_blob(result.points))
+    atomic_write_bytes(path, _point_blob(result.points, result.colors))
+    glb = folder / "preview.glb"
+    if glb.is_file():
+        glb.unlink()
     return path
 
 
@@ -67,12 +70,21 @@ def _decimate(vertices: np.ndarray, faces: np.ndarray):
     )
 
 
-def _point_blob(points: np.ndarray) -> bytes:
+def _point_blob(points: np.ndarray, colors: np.ndarray | None = None) -> bytes:
     if len(points) > POINT_CAP:
         step = int(np.ceil(len(points) / POINT_CAP))
         chosen = points[::step][:POINT_CAP]
+        if colors is not None and len(colors) == len(points):
+            colors = colors[::step][:POINT_CAP]
     else:
         chosen = points
     cloud = np.ascontiguousarray(chosen, dtype=np.float32)
-    header = POINT_MAGIC + np.uint32(len(cloud)).tobytes() + np.uint32(0).tobytes()
-    return header + cloud.tobytes()
+    rgb = None
+    if colors is not None and len(colors) == len(cloud):
+        rgb = np.ascontiguousarray(np.asarray(colors)[:, :3], dtype=np.uint8)
+    flags = np.uint32(1 if rgb is not None else 0)
+    header = POINT_MAGIC + np.uint32(len(cloud)).tobytes() + flags.tobytes()
+    payload = header + cloud.tobytes()
+    if rgb is not None:
+        payload += rgb.tobytes()
+    return payload

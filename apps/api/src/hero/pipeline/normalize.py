@@ -40,6 +40,7 @@ class Normalized:
     issues: list[dict[str, str]] = field(default_factory=list)
     mesh_vertices: np.ndarray | None = None
     mesh_faces: np.ndarray | None = None
+    colors: np.ndarray | None = None
 
 
 def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "auto") -> Normalized:
@@ -48,7 +49,7 @@ def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "aut
     span = float(np.max(maximum[:2] - minimum[:2])) if np.isfinite(minimum).all() else 0.0
     scale, guessed = _unit_scale(span, units, scene.unit_scale)
     voxel = _choose_voxel((maximum - minimum) * scale)
-    points, normals = _downsample(scene, scale, voxel)
+    points, normals, colors = _downsample(scene, scale, voxel)
     if len(points) == 0:
         empty = normals if normals is not None else np.zeros((0, 3))
         return Normalized(
@@ -73,7 +74,17 @@ def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "aut
     levels, hints = _storeys(points, normals)
     issues = [*_issues(guessed, uncertain), *hints]
     return Normalized(
-        points, normals, scale, voxel, up, levels, angle, issues, mesh_vertices, mesh_faces
+        points,
+        normals,
+        scale,
+        voxel,
+        up,
+        levels,
+        angle,
+        issues,
+        mesh_vertices,
+        mesh_faces,
+        colors,
     )
 
 
@@ -119,26 +130,47 @@ def _choose_voxel(size: np.ndarray) -> float:
 
 def _downsample(
     scene: RawScene, scale: float, voxel: float
-) -> tuple[np.ndarray, np.ndarray | None]:
+) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
     totals: dict[tuple[int, int, int], np.ndarray] = {}
     normal_totals: dict[tuple[int, int, int], np.ndarray] = {}
     has_normals = scene.normals is not None and scene.points is not None and scene.chunks is None
+    has_colors = (
+        scene.colors is not None
+        and scene.points is not None
+        and scene.chunks is None
+        and len(scene.colors) == len(scene.points)
+    )
+    color_totals: dict[tuple[int, int, int], np.ndarray] | None = {} if has_colors else None
     if has_normals and scene.points is not None and scene.normals is not None:
-        _accumulate(scene.points * scale, scene.normals, voxel, totals, normal_totals)
+        _accumulate(
+            scene.points * scale,
+            scene.normals,
+            voxel,
+            totals,
+            normal_totals,
+            scene.colors if has_colors else None,
+            color_totals,
+        )
+    elif has_colors and scene.points is not None:
+        _accumulate(scene.points * scale, None, voxel, totals, None, scene.colors, color_totals)
     else:
         for chunk in scene.iter_points():
             _accumulate(chunk * scale, None, voxel, totals, None)
     if not totals:
-        return np.zeros((0, 3)), None
+        return np.zeros((0, 3)), None, None
     points = np.empty((len(totals), 3), dtype=np.float64)
     normals = np.empty((len(totals), 3), dtype=np.float64) if has_normals else None
+    colors = np.empty((len(totals), 3), dtype=np.uint8) if color_totals is not None else None
     for index, (key, total) in enumerate(totals.items()):
         points[index] = total[:3] / total[3]
         if normals is not None:
             direction = normal_totals[key]
             length = float(np.linalg.norm(direction))
             normals[index] = direction / length if length else np.array([0.0, 0.0, 1.0])
-    return points, normals
+        if colors is not None and color_totals is not None:
+            averaged = color_totals[key] / total[3]
+            colors[index] = np.clip(np.rint(averaged), 0, 255)
+    return points, normals, colors
 
 
 def _accumulate(
@@ -147,6 +179,8 @@ def _accumulate(
     voxel: float,
     totals: dict[tuple[int, int, int], np.ndarray],
     normal_totals: dict[tuple[int, int, int], np.ndarray] | None,
+    colors: np.ndarray | None = None,
+    color_totals: dict[tuple[int, int, int], np.ndarray] | None = None,
 ) -> None:
     if len(points) == 0:
         return
@@ -165,6 +199,9 @@ def _accumulate(
     normal_sums = None
     if normals is not None and normal_totals is not None:
         normal_sums = np.add.reduceat(normals[order], starts, axis=0)
+    color_sums = None
+    if colors is not None and color_totals is not None:
+        color_sums = np.add.reduceat(np.asarray(colors, dtype=np.float64)[order], starts, axis=0)
     for index, key_row in enumerate(unique_keys):
         key = (int(key_row[0]), int(key_row[1]), int(key_row[2]))
         slot = totals.get(key)
@@ -179,6 +216,12 @@ def _accumulate(
                 normal_totals[key] = normal_sums[index].copy()
             else:
                 current += normal_sums[index]
+        if color_sums is not None and color_totals is not None:
+            painted = color_totals.get(key)
+            if painted is None:
+                color_totals[key] = color_sums[index].copy()
+            else:
+                painted += color_sums[index]
     del unique
 
 
