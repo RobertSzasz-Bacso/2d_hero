@@ -117,5 +117,5 @@ Reason: This matches architectural software: the number goes where the eye is, a
 
 ## 2026-10-09 — Framed-view color masks for fixture detection
 
-Decision: Furniture detection uses an overhead render of the exact 3D view the user framed, plus the original screenshot. Cursor returns an SVG mask with the fixed palette; the API rasterizes it and measures the blobs with OpenCV. It does not use the whole-scan top-view raster or model-emitted normalized coordinates.
-Reason: The installed Cursor SDK accepts image input but does not expose the IDE's native image-generation tool or generated-file output. SVG is the portable image artifact and keeps palette ownership, rasterization, metric registration, and wall snapping deterministic in the app.
+Decision: Furniture detection uses the source scan's measured 3D geometry for placement, dimensions, and rotation. Cursor receives the framed view only to label ambiguous clusters; it cannot change their geometry. The color-mask path remains only as a fallback for projects without a readable geometry source.
+Reason: The Phase 13 detector already fits metric oriented boxes from the scan. The installed Cursor SDK accepts image input but does not expose the IDE's native image-generation tool or generated-file output, so generated images must not be the source of construction measurements.

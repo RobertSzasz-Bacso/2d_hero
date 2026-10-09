@@ -289,6 +289,188 @@ def test_mask_identification_uses_the_framed_overhead_view(
     assert (folder / "identification-mask.png").is_file()
 
 
+def test_identify_uses_scan_geometry_before_cursor(
+    tmp_path: Path, token: str, memory_keyring
+) -> None:
+    del memory_keyring
+    from hero.app import create_app
+    from hero.testkit.building import build_building
+    from hero.testkit.writers import obj_bytes
+
+    source = tmp_path / "bathroom.obj"
+    source.write_bytes(obj_bytes(build_building(1, furniture="bathroom")))
+    calls: list[str] = []
+
+    def should_not_place(prompt: str, png: bytes, api_key: str) -> str:
+        del prompt, png, api_key
+        calls.append("place")
+        raise AssertionError("Cursor must not place measured furniture")
+
+    app = create_app(
+        token=token,
+        config_dir=tmp_path / "config",
+        projects_dir=tmp_path / "projects",
+        session_file=tmp_path / ".session-token",
+        open_file=lambda: None,
+        see=should_not_place,
+    )
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "Bathroom"},
+            headers=_headers(token),
+        )
+        assert created.status_code == 200
+        project_id = created.json()["id"]
+        saved = client.put(
+            f"/api/projects/{project_id}/plan",
+            json=_wall_plan(),
+            headers={**_headers(token), "If-Match": "0"},
+        )
+        assert saved.status_code == 200
+        body = _shot_body()
+        body["overheadImage"] = body["image"]
+        body["overheadFrame"] = [0.0, 0.0, 8.0, 0.0, 0.0, 6.0]
+        response = client.post(
+            f"/api/projects/{project_id}/identify",
+            headers=_headers(token),
+            json=body,
+        )
+
+    assert response.status_code == 200, response.text
+    assert "plan" in response.json(), response.text
+    fixtures = response.json()["plan"]["levels"][0]["fixtures"]
+    assert {fixture["symbol"] for fixture in fixtures} == {"toilet", "sink"}
+    assert calls == []
+
+
+def test_point_cloud_without_geometry_falls_back_to_cursor_mask(
+    tmp_path: Path, token: str, memory_keyring
+) -> None:
+    del memory_keyring
+    from hero.ai.mask import MASK_PALETTE
+    from hero.app import create_app
+    from hero.testkit.building import build_building
+    from hero.testkit.writers import obj_bytes
+
+    source = tmp_path / "bare.obj"
+    source.write_bytes(obj_bytes(build_building(1, furniture="bare")))
+    mask_image = Image.new("RGB", (300, 240), MASK_PALETTE["floor"])
+    ImageDraw.Draw(mask_image).rectangle((0, 80, 50, 140), fill=MASK_PALETTE["toilet"])
+    mask_buffer = io.BytesIO()
+    mask_image.save(mask_buffer, format="PNG")
+    seen: dict[str, Any] = {}
+
+    def make_mask(prompt: str, screenshot: bytes, overhead: bytes, api_key: str) -> bytes:
+        seen["prompt"] = prompt
+        seen["screenshot"] = screenshot
+        seen["overhead"] = overhead
+        seen["key"] = api_key
+        return mask_buffer.getvalue()
+
+    set_cursor_key(SECRET)
+    app = create_app(
+        token=token,
+        config_dir=tmp_path / "config",
+        projects_dir=tmp_path / "projects",
+        session_file=tmp_path / ".session-token",
+        open_file=lambda: None,
+        mask=make_mask,
+    )
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "Bare scan"},
+            headers=_headers(token),
+        )
+        assert created.status_code == 200
+        project_id = created.json()["id"]
+        saved = client.put(
+            f"/api/projects/{project_id}/plan",
+            json=_wall_plan(),
+            headers={**_headers(token), "If-Match": "0"},
+        )
+        assert saved.status_code == 200
+        body = _shot_body()
+        body["overheadImage"] = body["image"]
+        body["overheadFrame"] = [0.0, 0.0, 5.0, 0.0, 0.0, 3.0]
+        response = client.post(
+            f"/api/projects/{project_id}/identify",
+            headers=_headers(token),
+            json=body,
+        )
+
+    assert response.status_code == 200, response.text
+    fixtures = response.json()["plan"]["levels"][0]["fixtures"]
+    assert [fixture["symbol"] for fixture in fixtures] == ["toilet"]
+    assert seen["screenshot"].startswith(b"\x89PNG\r\n\x1a\n")
+    assert seen["overhead"].startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_cursor_labels_ambiguous_geometry_without_changing_measurements(
+    tmp_path: Path, token: str, memory_keyring
+) -> None:
+    del memory_keyring
+    from hero.app import create_app
+    from hero.testkit.building import build_building
+    from hero.testkit.writers import obj_bytes
+
+    source = tmp_path / "block.obj"
+    source.write_bytes(obj_bytes(build_building(1, furniture="block")))
+    seen: dict[str, Any] = {}
+
+    def label(prompt: str, pictures: list[bytes], api_key: str) -> str:
+        seen["prompt"] = prompt
+        seen["pictures"] = pictures
+        seen["key"] = api_key
+        return (
+            '{"labels":[{"id":"f1","symbol":"table","x":999,"y":999,'
+            '"width":999,"depth":999}]}'
+        )
+
+    set_cursor_key(SECRET)
+    app = create_app(
+        token=token,
+        config_dir=tmp_path / "config",
+        projects_dir=tmp_path / "projects",
+        session_file=tmp_path / ".session-token",
+        open_file=lambda: None,
+        label=label,
+    )
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        created = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "Block"},
+            headers=_headers(token),
+        )
+        assert created.status_code == 200
+        project_id = created.json()["id"]
+        saved = client.put(
+            f"/api/projects/{project_id}/plan",
+            json=_wall_plan(),
+            headers={**_headers(token), "If-Match": "0"},
+        )
+        assert saved.status_code == 200
+        body = _shot_body()
+        body["overheadImage"] = body["image"]
+        body["overheadFrame"] = [0.0, 0.0, 8.0, 0.0, 0.0, 6.0]
+        response = client.post(
+            f"/api/projects/{project_id}/identify",
+            headers=_headers(token),
+            json=body,
+        )
+
+    assert response.status_code == 200, response.text
+    fixture = response.json()["plan"]["levels"][0]["fixtures"][0]
+    assert fixture["symbol"] == "table"
+    assert fixture["x"] == pytest.approx(2.0, abs=0.05)
+    assert fixture["y"] == pytest.approx(3.0, abs=0.05)
+    assert fixture["width"] == pytest.approx(0.5, abs=0.05)
+    assert fixture["depth"] == pytest.approx(0.5, abs=0.05)
+    assert "x=" not in seen["prompt"]
+    assert len(seen["pictures"]) == 2
+
+
 def test_a_missed_camera_hit_is_reported_and_not_moved() -> None:
     from shapely.geometry import box
 

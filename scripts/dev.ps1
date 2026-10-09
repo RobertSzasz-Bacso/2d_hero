@@ -1,19 +1,20 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$UvDir = Join-Path $env:USERPROFILE ".local\bin"
-if (Test-Path (Join-Path $UvDir "uv.exe")) {
-  $env:Path = "$UvDir;$env:Path"
-}
-
-$uv = "uv"
-$uvExe = Join-Path $UvDir "uv.exe"
-if (Test-Path $uvExe) {
-  $uv = $uvExe
-}
-
 $apiDir = Join-Path $Root "apps\api"
 $webDir = Join-Path $Root "apps\web"
-$api = Start-Process -FilePath $uv -ArgumentList @("run", "hero", "--no-browser") -WorkingDirectory $apiDir -PassThru -NoNewWindow
+$venvPython = Join-Path $apiDir ".venv\Scripts\python.exe"
+$uv = Get-Command uv -CommandType Application -ErrorAction SilentlyContinue
+if (Test-Path $venvPython) {
+  $apiCommand = $venvPython
+  $apiArguments = @("-m", "hero", "--no-browser")
+} elseif ($uv) {
+  $apiCommand = $uv.Source
+  $apiArguments = @("run", "hero", "--no-browser")
+} else {
+  throw "Could not find apps\api\.venv\Scripts\python.exe or uv.exe. Create the API environment or install uv."
+}
+
+$api = Start-Process -FilePath $apiCommand -ArgumentList $apiArguments -WorkingDirectory $apiDir -PassThru -NoNewWindow
 if (-not $api) {
   throw "Could not start the API."
 }

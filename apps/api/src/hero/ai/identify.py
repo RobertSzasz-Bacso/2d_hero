@@ -12,15 +12,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 
-from hero.ai.chat import ask_mask, ask_with_images, review_picture
+from hero.ai.chat import ask_fixture_labels, ask_mask, ask_with_images, review_picture
 from hero.ai.mask import MaskFixture, MaskFrame, decode_mask
 from hero.ai.room import RoomBounds, measure_cloud, outside_messages
 from hero.ai.session import ProposalError
 from hero.ai.viewshot import ViewShot, fixture_pose, plan_xy
 from hero.atomic import atomic_write_bytes, atomic_write_text
+from hero.ingest.read import read_source
+from hero.jobs import source_file
 from hero.pipeline.cloud import read_cloud
+from hero.pipeline.normalize import normalize_scene
+from hero.pipeline.planwrite import scan_plan
 from hero.projects import ProjectNotFound, ProjectStore, RevisionConflict
 from hero.schema import Fixture, Plan
 
@@ -28,7 +32,9 @@ SeeImage = Callable[[str, bytes, str], str]
 CheckPlan = Callable[[str, bytes, bytes, str], str]
 Correct = Callable[[str], str]
 MakeMask = Callable[[str, bytes, bytes, str], bytes]
+LabelFixtures = Callable[[str, list[bytes], str], str]
 _CORRECTIONS = 3
+_GEOMETRY_SUFFIXES = {".obj", ".glb", ".gltf", ".ply", ".e57", ".las", ".laz", ".usdz"}
 
 _SYMBOLS = (
     "toilet",
@@ -181,6 +187,7 @@ def identify_project(
     see: SeeImage | None = None,
     correct: Correct | None = None,
     mask: MakeMask | None = None,
+    label: LabelFixtures | None = None,
 ) -> Plan:
     """Detect fixtures from the framed view and replace the first level's fixtures."""
     try:
@@ -189,6 +196,18 @@ def identify_project(
         raise
     png = _png_bytes(image)
     if overhead_image is not None or overhead_frame is not None:
+        folder = store.project_dir(project_id)
+        if has_geometry_source(folder):
+            return _identify_from_geometry(
+                store,
+                project_id,
+                api_key,
+                screenshot=png,
+                overhead_image=overhead_image,
+                overhead_frame=overhead_frame,
+                make_mask=mask,
+                label=label,
+            )
         return _identify_from_mask(
             store,
             project_id,
@@ -311,8 +330,155 @@ def _identify_from_mask(
         raise IdentifyError("The plan changed. Try again.") from exc
 
 
+def _identify_from_geometry(
+    store: ProjectStore,
+    project_id: str,
+    api_key: str,
+    *,
+    screenshot: bytes,
+    overhead_image: str | None,
+    overhead_frame: list[float] | None,
+    make_mask: MakeMask | None,
+    label: LabelFixtures | None,
+) -> Plan:
+    if overhead_image is None or overhead_frame is None:
+        raise IdentifyError("The overhead view is missing its metric frame.")
+    folder = store.project_dir(project_id)
+    overhead_png = _png_bytes(overhead_image)
+    frame = _mask_frame(overhead_frame)
+    visible = _bounds_for_frame(frame).polygon
+    try:
+        result = normalize_scene(read_source(source_file(folder)))
+    except Exception as exc:
+        raise IdentifyError("The source scan could not be read for furniture detection.") from exc
+    detected = scan_plan(result)
+    plan = store.read_plan(project_id)
+    if not plan.levels or not detected.levels:
+        raise IdentifyError("The scan has no storey for furniture detection.")
+    if not any(level.fixtures for level in detected.levels):
+        if not api_key:
+            raise IdentifyError(
+                "The scan geometry did not reveal furniture. "
+                "Save a Cursor key to use image detection."
+            )
+        return _identify_from_mask(
+            store,
+            project_id,
+            api_key,
+            screenshot=screenshot,
+            overhead_image=overhead_image,
+            overhead_frame=overhead_frame,
+            make_mask=make_mask,
+        )
+    current = plan.levels[0]
+    detected_level = min(
+        detected.levels,
+        key=lambda level: abs(level.elevation - current.elevation),
+    )
+    replacement = detected_level.model_copy(
+        update={
+            "id": current.id,
+            "name": current.name,
+            "fixtures": [
+                fixture
+                for fixture in detected_level.fixtures
+                if visible.covers(Point(fixture.x, fixture.y))
+            ],
+        }
+    )
+    blocks = [fixture for fixture in replacement.fixtures if fixture.symbol == "block"]
+    talk = _Talk.start(folder)
+    prompt = _label_prompt(blocks)
+    atomic_write_bytes(folder / "identification-overhead.png", overhead_png)
+    atomic_write_text(folder / "identification-prompt.txt", prompt)
+    talk.prompt(prompt, api_key, image=screenshot, plan=overhead_png)
+    if blocks and api_key:
+        labeler = label or _default_labels
+        try:
+            reply = labeler(prompt, [screenshot, overhead_png], api_key)
+            replacements = _parse_labels(reply, {fixture.id for fixture in blocks})
+            if replacements:
+                replacement = replacement.model_copy(
+                    update={
+                        "fixtures": [
+                            fixture.model_copy(
+                                update={
+                                    "symbol": replacements.get(fixture.id, fixture.symbol),
+                                    "role": _ROLES.get(
+                                        replacements.get(fixture.id, fixture.symbol),
+                                        fixture.role,
+                                    ),
+                                }
+                            )
+                            for fixture in replacement.fixtures
+                        ]
+                    }
+                )
+            talk.reply(reply, api_key)
+        except (ProposalError, TypeError, ValueError) as exc:
+            talk.error(str(exc), api_key)
+    else:
+        talk.reply("No ambiguous fixture clusters.", api_key)
+    updated = plan.model_copy(
+        update={"levels": [replacement, *plan.levels[1:]]},
+    )
+    try:
+        return store.save_plan(project_id, updated, if_match=plan.revision)
+    except RevisionConflict as exc:
+        raise IdentifyError("The plan changed. Try again.") from exc
+
+
 def _default_mask(prompt: str, screenshot: bytes, overhead: bytes, api_key: str) -> bytes:
     return ask_mask(prompt, [screenshot, overhead], api_key)
+
+
+def _default_labels(prompt: str, pictures: list[bytes], api_key: str) -> str:
+    return ask_fixture_labels(prompt, pictures, api_key)
+
+
+def has_geometry_source(folder: Path) -> bool:
+    if (folder / "cloud.bin").is_file():
+        return True
+    try:
+        return source_file(folder).suffix.lower() in _GEOMETRY_SUFFIXES
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _label_prompt(blocks: list[Any]) -> str:
+    objects = ", ".join(
+        f"{fixture.id} ({fixture.width:.2f} m by {fixture.depth:.2f} m)"
+        for fixture in blocks
+    )
+    return (
+        "The pictures show a 3D room and its overhead view. The application has already measured "
+        "the object boxes and their positions from the scan. Identify only the ambiguous object "
+        "IDs listed below. Do not change geometry. Return JSON only in this exact form: "
+        '{"labels":[{"id":"f1","symbol":"toilet"}]}. '
+        "Use only toilet, sink, bathtub, shower, kitchen-counter, stove, bed-double, sofa, "
+        "table, wardrobe, block, or chair. Keep an object as block if uncertain. "
+        f"Measured ambiguous objects: {objects or 'none'}."
+    )
+
+
+def _parse_labels(text: str, allowed_ids: set[str]) -> dict[str, str]:
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("Cursor did not return fixture labels.")
+    payload = json.loads(text[start : end + 1])
+    raw = payload.get("labels")
+    if not isinstance(raw, list):
+        raise ValueError("Cursor did not return fixture labels.")
+    found: dict[str, str] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        identifier = item.get("id")
+        symbol = item.get("symbol")
+        if identifier in allowed_ids and symbol in _SYMBOLS:
+            found[str(identifier)] = str(symbol)
+    return found
 
 
 def _mask_frame(values: list[float]) -> MaskFrame:

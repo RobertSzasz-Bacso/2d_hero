@@ -75,6 +75,12 @@ def ask_mask(prompt: str, pictures: list[bytes], api_key: str) -> bytes:
     return _svg_mask_png(reply)
 
 
+def ask_fixture_labels(prompt: str, pictures: list[bytes], api_key: str) -> str:
+    """Ask Cursor to name already-measured ambiguous fixture clusters."""
+
+    return ask_with_images(prompt, pictures, api_key)
+
+
 def _svg_mask_png(reply: str, *, size: int = 768) -> bytes:
     start = reply.find("<svg")
     end = reply.rfind("</svg>")

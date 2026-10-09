@@ -15,7 +15,9 @@ POINT_MAGIC = b"HEROPTS\x00"
 
 def write_preview(source: Path, folder: Path, result: Normalized) -> Path:
     """Write ``preview.glb`` when the source is a mesh, otherwise ``preview.pts``."""
-    mesh = _load_mesh(source, result.unit_scale)
+    mesh = _normalized_mesh(result)
+    if mesh is None:
+        mesh = _load_mesh(source, result.unit_scale)
     if mesh is not None:
         path = folder / "preview.glb"
         payload = cast(Any, mesh).export(file_type="glb")
@@ -32,6 +34,23 @@ def write_preview(source: Path, folder: Path, result: Normalized) -> Path:
     if glb.is_file():
         glb.unlink()
     return path
+
+
+def _normalized_mesh(result: Normalized):
+    if result.mesh_vertices is None or result.mesh_faces is None:
+        return None
+    if len(result.mesh_vertices) == 0 or len(result.mesh_faces) == 0:
+        return None
+    import trimesh
+
+    mesh = trimesh.Trimesh(
+        vertices=np.asarray(result.mesh_vertices, dtype=np.float64),
+        faces=np.asarray(result.mesh_faces, dtype=np.int64),
+        process=False,
+    )
+    if len(mesh.faces) > TRIANGLE_CAP:
+        mesh = _decimate(np.asarray(mesh.vertices), np.asarray(mesh.faces))
+    return mesh
 
 
 def _load_mesh(source: Path, unit_scale: float):

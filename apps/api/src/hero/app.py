@@ -21,7 +21,7 @@ from starlette.responses import FileResponse, JSONResponse
 
 from hero.ai.agent import CursorPlanAgent, PlanAgent
 from hero.ai.chat import ask_cursor
-from hero.ai.identify import IdentifyError, identify_project, review_placement
+from hero.ai.identify import IdentifyError, has_geometry_source, identify_project, review_placement
 from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.ai.session import ProposalError
 from hero.dialogs import ask_open_file
@@ -116,6 +116,7 @@ def create_app(
     see: Callable[[str, bytes, str], str] | None = None,
     check: Callable[[str, bytes, bytes, str], str] | None = None,
     mask: Callable[[str, bytes, bytes, str], bytes] | None = None,
+    label: Callable[[str, list[bytes], str], str] | None = None,
 ) -> FastAPI:
     """Build the API. Session files are written only when paths are passed in."""
 
@@ -456,7 +457,13 @@ def create_app(
     @app.post("/api/projects/{project_id}/identify")
     def post_identify(project_id: str, body: IdentifyBody) -> JSONResponse:
         key = get_cursor_key()
-        if not key:
+        geometry_only = False
+        if body.overheadImage is not None and body.overheadFrame is not None:
+            try:
+                geometry_only = has_geometry_source(project_store().project_dir(project_id))
+            except ProjectNotFound:
+                geometry_only = False
+        if not key and not geometry_only:
             return JSONResponse(
                 {
                     "cursorKeySet": False,
@@ -467,7 +474,7 @@ def create_app(
             plan = identify_project(
                 project_store(),
                 project_id,
-                key,
+                key or "",
                 image=body.image,
                 projection=body.projection,
                 matrix_world=body.matrixWorld,
@@ -476,6 +483,7 @@ def create_app(
                 overhead_frame=body.overheadFrame,
                 see=look,
                 mask=mask,
+                label=label,
             )
         except ProjectNotFound:
             return JSONResponse({"detail": "Project was not found."}, status_code=404)

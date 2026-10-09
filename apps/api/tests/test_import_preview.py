@@ -74,6 +74,40 @@ def test_preview_glb_has_fewer_triangles_than_a_dense_source(
     assert len(loaded.faces) > 0
 
 
+def test_mesh_preview_uses_the_normalized_geometry_frame(tmp_path: Path) -> None:
+    source = tmp_path / "raw.obj"
+    source.write_text(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+        encoding="utf-8",
+    )
+    vertices = np.array(
+        [[10.0, 20.0, 30.0], [11.0, 20.0, 30.0], [10.0, 21.0, 30.0]],
+        dtype=np.float64,
+    )
+    result = Normalized(
+        points=vertices,
+        normals=np.zeros((3, 3)),
+        unit_scale=1.0,
+        voxel=0.02,
+        estimated_up=np.array([0.0, 0.0, 1.0]),
+        levels=[],
+        manhattan_angle_deg=0.0,
+        mesh_vertices=vertices,
+        mesh_faces=np.array([[0, 1, 2]], dtype=np.int32),
+    )
+
+    write_preview(source, tmp_path, result)
+    loaded = cast(
+        Any,
+        trimesh.load(
+            __import__("io").BytesIO((tmp_path / "preview.glb").read_bytes()),
+            file_type="glb",
+            force="mesh",
+        ),
+    )
+    assert np.asarray(loaded.vertices).min(axis=0) == pytest.approx([10.0, 20.0, 30.0])
+
+
 def test_point_preview_stores_rgb(tmp_path: Path) -> None:
     points = np.array([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], dtype=np.float64)
     colors = np.array([[255, 0, 0], [0, 128, 255]], dtype=np.uint8)
