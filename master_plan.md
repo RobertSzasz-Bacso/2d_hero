@@ -38,6 +38,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 19 — Drawing tools — `done`
 - [ ] Phase 20 — Optional machine-learning detectors — `not started`
 - [x] Phase 21 — Trimble Connect hosted integration — `done`
+- [ ] Phase 22 — Open a point cloud from Trimble Connect — `not started`
 
 ## Decisions that every phase keeps
 
@@ -1002,4 +1003,66 @@ Do not download point clouds, run Trimble file imports, or upload plans in this 
 Tests first: web adapter tests, hosted API authentication and secret-leak tests, and a deterministic mocked iframe/parent API Playwright flow. Run them and keep the failures before implementing.
 
 Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-21.md. Commit message: "Phase 21: Trimble Connect hosted integration". Do not push.
+```
+
+---
+
+## Phase 22 — Open a point cloud from Trimble Connect
+
+**Status:** `not started`
+
+**Requires:** Phase 21 done. The `check.ps1` failures listed in `docs/handoff/phase-21.md` ("Left open") are not part of this phase.
+
+**Goal:** in the hosted app, the user picks a point cloud (or IFC) from the Trimble Connect project instead of choosing a local file. The app downloads it and starts the normal import flow.
+
+**Design (verify each point in the installed package and Trimble's docs before coding; record the result in `docs/trimble-connect.md`)**
+
+- The picker lists the project's files and folders through the Trimble Connect Core REST API, called from the browser with the parent token. It shows only supported types (the import types in `docs/architecture.md`). If the Workspace API exposes the model explorer's loaded models, show those too and map each one to its file id and version id. If a point cloud is not available as a file, say so in the picker and stop. Do not invent a conversion.
+- The browser asks the Core API for a download URL of the chosen file version. The browser sends that URL (not the token) to a new backend route. The backend streams the file to disk. It never receives or stores the Trimble token for this step.
+- The backend accepts only `https` URLs whose host is on an allow-list (setting `HERO_TRIMBLE_DOWNLOAD_HOSTS`, with no default that was not verified). It rejects redirects to other hosts, private or loopback addresses, and credentials in the URL. It logs no URL query string, because signed URLs are secrets.
+- The download writes a temp file in the project folder and `os.replace`s it. It is chunked, reports progress, can be cancelled, and has a size limit setting. The 200 MB copy limit in local mode stays. Hosted downloads use their own limit. The existing import job (`kind: import`) runs unchanged on the result.
+- The project records the source as a Trimble file (file id, version id, name) in project metadata. No URL and no token.
+- Local mode is unchanged: the local file dialog stays, and the Trimble picker is not shown outside the hosted shell.
+
+**In**
+
+- Web: a file picker panel in the hosted shell, with folder navigation, type filter, file size, and states for loading, empty, no access, and error. The manual file import stays available in hosted mode.
+- Web: a `trimble/files.ts` module for the Core API calls, behind the existing integration adapter. The editor does not import Trimble code.
+- API: `POST /api/projects/from-url` (hosted only). Local mode returns 404.
+- Docs: `docs/trimble-connect.md` (Core API endpoints used, token scope result, download hosts seen live), the `docs/architecture.md` route table, and `docs/decisions.md` for the URL-not-token choice and any new dependency.
+
+**Out**
+
+- Uploading plans or PDFs back to Trimble Connect.
+- Per-user project ownership and storage separation.
+- Streaming a point cloud into the viewer without importing it.
+- Converting Trimble's own point cloud format.
+
+**Tests first**
+
+- API: `from-url` returns 404 in local mode and 401 without a bearer in hosted mode.
+- API: rejects `http`, a host not on the allow-list, a redirect to another host, a private or loopback address, a URL with credentials, and an unsupported file extension, each with 400.
+- API: a local fake server streams a 5 MB LAS fixture. The project exists, the file bytes match the source SHA-256, and an import job on it succeeds. A failed download leaves no partial file and no project. A cancelled download does the same.
+- API: a file over the hosted size limit is rejected with 413 and nothing is left on disk.
+- API: no log line, response body, or file under the config and project folders contains the URL query string or the bearer token (`caplog` and a file scan, as in `tests/test_hosted.py`).
+- Web unit: the files module lists a folder, filters unsupported types, handles 401, 403, 404, and an empty folder, and never writes the token or a download URL to storage.
+- Playwright: the mocked parent page serves a project file list. The user opens a folder, selects a `.las` file, and sees the import screen for the new project. No local file dialog is called.
+- Live check (owner, not automated): a real Trimble Connect project lists its files, and a real point cloud downloads and imports. Record the token scope result, the download host, and whether model-explorer models map to files.
+
+**Acceptance:** in Trimble Connect, the user opens 2D Hero, chooses a point cloud from the project's files, and reaches the import screen without touching a local file. The token never reaches the backend for the download. Local mode is unchanged.
+
+### Prompt
+
+```text
+Implement Phase 22 of 2D Hero in C:\prod\2d_hero. One phase only.
+
+Read first: AGENTS.md, docs/handoff/phase-21.md, master_plan.md (Phase 22), docs/trimble-connect.md, docs/architecture.md, docs/libraries.md, docs/decisions.md, .cursor/rules/secrets.mdc, .cursor/rules/python-backend.mdc, .cursor/rules/web-frontend.mdc.
+
+Add a Trimble Connect file picker to the hosted shell. The browser lists project files through the Trimble Connect Core API with the parent token, asks for a download URL, and sends only that URL to a new hosted-only backend route that streams it into a new project. Then the normal import flow runs. Verify the Core API endpoints, the Workspace API viewer/model methods, and the download-URL behavior in the installed trimble-connect-workspace-api package and Trimble's official docs before coding. If a point cloud is not available as a downloadable file, stop and report what the API returns. Do not convert formats.
+
+Never log, store, or return the access token or a signed URL's query string. Enforce the https, host allow-list, redirect, private-address, and size rules in master_plan.md. Do not mock the function you are writing; fake only the network. Local mode stays unchanged. Do not upload anything to Trimble Connect. Do not start a later phase.
+
+Tests first, as listed under Phase 22. Run them and keep the failures before implementing.
+
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-22.md. Commit message: "Phase 22: Open a point cloud from Trimble Connect". Do not push.
 ```
