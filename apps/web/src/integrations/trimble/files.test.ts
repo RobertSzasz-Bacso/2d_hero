@@ -105,8 +105,8 @@ describe("listing", () => {
     expect(listing.folderId).toBe("root-1");
     expect(listing.folders.map((folder) => folder.name)).toEqual(["Archive", "Scans"]);
     expect(listing.files).toEqual([
-      { id: "a", versionId: "v1", name: "Room.las", size: 5_242_880 },
       { id: "c", versionId: "v3", name: "Model.IFC", size: 99 },
+      { id: "a", versionId: "v1", name: "Room.las", size: 5_242_880 },
     ]);
     expect(listing.hidden).toBe(1);
     const sent = net.calls.filter((call) => call.url.origin === "https://app21.connect.trimble.com");

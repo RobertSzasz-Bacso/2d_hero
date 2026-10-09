@@ -112,10 +112,11 @@ class ProjectStore:
         read: Callable[[int], Awaitable[bytes]],
         name: str | None,
         *,
-        limit: int = MAX_COPY_BYTES,
+        limit: int | None = None,
         trimble_source: dict[str, str] | None = None,
     ) -> StoredProject:
         """Copy chunks into a new project. ``limit`` is the byte cap; local copies keep 200 MB."""
+        cap = MAX_COPY_BYTES if limit is None else limit
         source_name, suffix = _source_names(filename)
         project_id = uuid.uuid4().hex
         folder = self.projects_dir / project_id
@@ -130,7 +131,7 @@ class ProjectStore:
                     if not chunk:
                         break
                     size += len(chunk)
-                    if size > limit:
+                    if size > cap:
                         raise FileTooLarge
                     handle.write(chunk)
             os.replace(temporary, destination)

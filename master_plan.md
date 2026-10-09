@@ -38,7 +38,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 19 — Drawing tools — `done`
 - [ ] Phase 20 — Optional machine-learning detectors — `not started`
 - [x] Phase 21 — Trimble Connect hosted integration — `done`
-- [ ] Phase 22 — Open a point cloud from Trimble Connect — `not started`
+- [x] Phase 22 — Open a point cloud from Trimble Connect — `done`
 
 ## Decisions that every phase keeps
 

@@ -568,3 +568,50 @@ def test_url_query_and_bearer_never_reach_logs_responses_or_disk(
         for path in tmp_path.rglob("*"):
             if path.is_file() and path.stat().st_size < 1_000_000:
                 assert secret.encode() not in path.read_bytes(), path
+
+
+# --- configuration --------------------------------------------------------
+
+
+def _env(**overrides: str) -> dict[str, str]:
+    base = {
+        "HERO_HOSTED_PUBLIC_URL": PUBLIC_URL,
+        "HERO_HOSTED_ALLOWED_HOSTS": HOST,
+        "HERO_TRIMBLE_ISSUER": ISSUER,
+        "HERO_TRIMBLE_AUDIENCE": AUDIENCE,
+        "HERO_TRIMBLE_JWKS_URL": JWKS_URL,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_download_hosts_have_no_default() -> None:
+    assert HostedConfig.from_env(_env()).download_hosts == ()
+
+
+def test_download_settings_are_read_from_the_environment() -> None:
+    parsed = HostedConfig.from_env(
+        _env(
+            HERO_TRIMBLE_DOWNLOAD_HOSTS="Files.Example-CDN.test, other.example.test",
+            HERO_TRIMBLE_MAX_DOWNLOAD_MB="750",
+        )
+    )
+
+    assert parsed.download_hosts == ("files.example-cdn.test", "other.example.test")
+    assert parsed.max_download_bytes == 750 * 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"HERO_TRIMBLE_DOWNLOAD_HOSTS": "*.example.test"},
+        {"HERO_TRIMBLE_DOWNLOAD_HOSTS": "https://files.example.test"},
+        {"HERO_TRIMBLE_MAX_DOWNLOAD_MB": "0"},
+        {"HERO_TRIMBLE_MAX_DOWNLOAD_MB": "big"},
+    ],
+)
+def test_unsafe_download_settings_are_refused(overrides: dict[str, str]) -> None:
+    from hero.hosted import HostedConfigError
+
+    with pytest.raises(HostedConfigError):
+        HostedConfig.from_env(_env(**overrides))
