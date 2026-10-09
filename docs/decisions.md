@@ -148,3 +148,13 @@ Reason: They read or change the machine that runs the server. In local mode that
 
 Decision: `.gitattributes` keeps the golden SVG as LF. `scripts/e2e-server.ps1` reads `HERO_E2E_API_PORT` and defaults to 8091.
 Reason: With `core.autocrlf=true` the golden SVG checked out as CRLF, and the byte comparison in `drawing.test.ts` failed on this machine before any Phase 21 change. Port 8091 was held by an unrelated program here.
+
+## 2026-10-09 — Trimble downloads send a URL, not the token
+
+Decision: In hosted mode the browser lists project files and asks for a download URL with the parent token, and sends only that URL to `POST /api/projects/from-url`. The backend never uses the Trimble token for the download. The URL must be `https`, on the `HERO_TRIMBLE_DOWNLOAD_HOSTS` list, public, and redirect only within its own host. Redirects to any other host are refused.
+Reason: The signed URL needs no `Authorization` header, so the server does not need the token to fetch it. A server-side fetch of a user-supplied URL is an SSRF risk, so the host list has no default, private and loopback addresses are refused, and redirects stay on the first host. The token still goes to the backend on the same request as every other `/api` call, only because the hosted middleware checks it; the handler does not read it.
+
+## 2026-10-09 — httpx is a runtime dependency
+
+Decision: `httpx` moves from the dev group to the dependencies of `apps/api`.
+Reason: `hero.download` streams the signed URL with it. It was already installed for the tests and already on the library list. Starlette's test client uses `httpx2`, which is unrelated.

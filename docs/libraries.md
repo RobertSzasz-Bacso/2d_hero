@@ -24,7 +24,8 @@ Verify the import and the function signature in the installed version before wri
 | `mcp` | `mcp` | Phase 15 tools. |
 | `cursor-sdk` | `cursor_sdk` | Phase 15 only. Optional extra, not required for tests. |
 | `pyjwt[crypto]` | `jwt` | Phase 21. Checks the Trimble access token in hosted mode (RS256, JWKS). |
-| `pytest`, `httpx` | | Tests. |
+| `httpx` | | Phase 22. Streams a hosted download URL to disk (`hero.download`). Also used by the tests. |
+| `pytest` | | Tests. |
 
 Pin versions in `pyproject.toml` once Phase 1 has installed a working set. Do not leave ranges that float across a phase boundary without a lockfile (`uv.lock` is committed).
 

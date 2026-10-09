@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import HostedGate from "./integrations/trimble/HostedGate.tsx";
+import TrimblePicker from "./integrations/trimble/TrimblePicker.tsx";
 import { createTrimbleAdapter, isEmbedded } from "./integrations/trimble/connection.ts";
 import { takeSessionToken } from "./session.ts";
 import "./index.css";
@@ -16,11 +17,16 @@ if (!root) {
   throw new Error("Root element is missing.");
 }
 
+// The Trimble file picker exists only in the hosted shell. Local mode renders App as before.
+const adapter = hosted ? createTrimbleAdapter() : null;
+
 createRoot(root).render(
   <StrictMode>
-    {hosted ? (
-      <HostedGate adapter={createTrimbleAdapter()}>
-        <App />
+    {adapter ? (
+      <HostedGate adapter={adapter}>
+        <App
+          hostedImport={(onProject) => <TrimblePicker adapter={adapter} onProject={onProject} />}
+        />
       </HostedGate>
     ) : (
       <App />

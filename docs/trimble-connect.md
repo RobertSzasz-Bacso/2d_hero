@@ -1,6 +1,6 @@
 # Trimble Connect hosted integration
 
-Phase 21. The editor runs as a Trimble Connect project extension in an iframe. This phase is the shell only: connect, get a token, call the backend. It does not download point clouds, import Trimble files, or upload plans.
+Phase 21. The editor runs as a Trimble Connect project extension in an iframe. Phase 21 is the shell only: connect, get a token, call the backend. Phase 22 adds the file picker and the download (see "Files and download"). Nothing is uploaded back to Trimble Connect.
 
 ## Verified package
 
@@ -83,3 +83,55 @@ The e2e script uses API port 8091. If another program holds it, set `HERO_E2E_AP
 
 The adapter calls ui.setMenu({ title, command, icon }) once, after the handshake. The icon must be an absolute URL to a real PNG on our origin (/icon.png, also the manifest icon). With no icon the call is accepted but Trimble Connect draws no entry. The adapter logs whether Trimble accepted the entry (no token in the message).
 
+
+## Files and download (Phase 22)
+
+The hosted shell has a file picker. The browser lists the project's files with the parent token, asks Trimble for a download URL, and sends only that URL to `POST /api/projects/from-url`. The backend streams the URL to a new project and the normal import flow runs. Nothing is uploaded to Trimble Connect, and nothing is converted.
+
+### What was verified, and where
+
+| Item | Source | Status |
+| --- | --- | --- |
+| Regional base URLs come from `GET https://app.connect.trimble.com/tc/api/2.0/regions`. Each region has an `origin`. | Trimble Connect reference, "Regions can be discovered by calling the /regions endpoint of the master region. Use the origin field value to determine the base URL". | Doc read. Field names `origin` and `location` not seen in a live reply. |
+| Project root: `GET {origin}/tc/api/2.0/projects/{projectId}` has `rootId`. | `trimble-connect-sdk` 4.0.11 typings (`FileSystemEntry`), forum threads on walking the tree from the root. | Not seen live. |
+| Folder contents: `GET {origin}/tc/api/2.0/folders/{id}/items`. Items have `id`, `name`, `type` (`FILE` or `FOLDER`), `versionId`, `size`. | `trimble-connect-sdk` 4.0.11 typings. | Not seen live. |
+| Download URL: `GET {origin}/tc/api/2.0/files/fs/{fileId}/downloadurl?versionId={versionId}` returns `{ "url": "https://..." }`. The URL is signed and short-lived and needs no `Authorization` header. | Trimble Connect Core API reference, `UrlResponse` in the SDK typings, forum thread "API - File download URL". | Not seen live. The forum thread reports HTTP 403 from non-browser clients for some URLs. See Left open in the handoff. |
+| `api.viewer.getModels("loaded")` returns `ModelSpec[]` with `id`, `versionId`, `name`, `type`, `state`. | `trimble-connect-workspace-api` 0.3.38, `dist/Workspace/ViewerAPI.d.ts` and `common.d.ts`. | Types read. That a model's `id` is the Core API file id is not verified live. |
+| `api.project.getProject()` returns `{ id, name?, location?, ... }`. | `dist/Workspace/ProjectAPI.d.ts`. | `location` is used only to try the right region first. |
+
+The picker only sends the token to `https` hosts that are `connect.trimble.com` or end in `.connect.trimble.com`. A region origin outside that set is ignored.
+
+### Download rules
+
+The backend enforces these in `apps/api/src/hero/download.py`.
+
+- `https` only. No credentials in the URL. Port 443 only.
+- The host must be in `HERO_TRIMBLE_DOWNLOAD_HOSTS`. There is no default. With the list empty, every request gets 400.
+- Every address the host resolves to must be public (`ipaddress.is_global`). A literal IP in the URL is checked the same way.
+- Redirects are followed by hand, at most 3, and only to the same host. Each hop passes the same checks. A redirect to another host is 400.
+- The file name from the request must end in a type the import reads (`.obj .glb .gltf .usdz .usd .usda .usdc .ply .e57 .las .laz .ifc`). Otherwise 400.
+- Size: `HERO_TRIMBLE_MAX_DOWNLOAD_MB` (default 2048). A `Content-Length` over the limit is 413 before any byte is stored. A stream that passes the limit is 413 and removed. The 200 MB copy limit for local uploads is unchanged.
+- The download writes `source.<ext>.part` in the new project folder and `os.replace`s it. Any failure or cancel removes the whole project folder.
+- Logs carry no URL. `httpx` and `httpcore` log every request URL at INFO, query string included, so `hero.download` raises both loggers to WARNING.
+- The handler never reads the `Authorization` header. The hosted middleware checks it as for every `/api` route and drops it. The request to the download host carries no `Authorization` and no cookie.
+
+The project records `trimbleSource` (`fileId`, `versionId`, `name`) in `project.json`. It holds no URL and no token.
+
+### Settings added
+
+| Variable | Meaning |
+| --- | --- |
+| `HERO_TRIMBLE_DOWNLOAD_HOSTS` | Comma list of exact host names the signed download URL may use. No default. Not verified against a live project yet: read the host from a real URL and set it. |
+| `HERO_TRIMBLE_MAX_DOWNLOAD_MB` | Optional. Whole number of megabytes. Default 2048. |
+
+### Progress and cancel
+
+The browser picks a 32-character hex transfer id and sends it as `transferId`. `GET /api/transfers/{id}` returns `{ "state": "running", "bytes": n, "total": n or null }` while the download runs. `POST /api/transfers/{id}/cancel` stops it; the original request then returns 409 `The download was cancelled.` A finished transfer is forgotten, so its id returns 404.
+
+### Point clouds that are not files
+
+A point cloud that exists only in the viewer cannot be downloaded. If the Core API answers 404 for a loaded model's file id, the picker says `This model is not available as a downloadable file.` and stops. No conversion is attempted.
+
+### Live check (owner)
+
+Not automated. In a real project: list files, download a real `.las` or `.e57`, and record here (a) the token scope result, (b) the download host, (c) whether `getModels("loaded")` ids are file ids, (d) the exact `/regions`, `/projects/{id}`, and `/folders/{id}/items` field names.

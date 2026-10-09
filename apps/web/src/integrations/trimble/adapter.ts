@@ -1,4 +1,5 @@
 import type { BearerStore } from "../../hostAuth.ts";
+import { loadedModels, type LoadedModel } from "./models.ts";
 
 /** What the editor knows about the host. It never holds the access token. */
 export type HostStatus =
@@ -14,6 +15,8 @@ export interface HostState {
   status: HostStatus;
   projectId?: string;
   projectName?: string;
+  /** The project's region name from the Workspace API. Context for the file picker. */
+  projectLocation?: string;
   message?: string;
 }
 
@@ -22,7 +25,13 @@ export type HostEvent = string;
 /** The part of the Trimble Workspace API this app uses. */
 export interface WorkspaceLike {
   extension: { requestPermission(permission: "accesstoken"): Promise<string> };
-  project: { getProject(): Promise<{ id: string; name?: string }> };
+  project: { getProject(): Promise<{ id: string; name?: string; location?: string }> };
+  /** Optional: the models the user has loaded in the Trimble Connect viewer. */
+  viewer?: {
+    getModels(state?: "loaded" | "unloaded"): Promise<
+      { id: string; versionId: string; name: string }[]
+    >;
+  };
   /** Optional: the left navigation entry. Trimble Connect shows no entry unless we add one. */
   ui?: { setMenu(menu: { title: string; command: string; icon?: string }): Promise<unknown> };
 }
@@ -43,6 +52,8 @@ export interface HostAdapter {
   start(): Promise<void>;
   stop(): void;
   getState(): HostState;
+  /** Supported models the viewer has loaded. Empty when the viewer is not available. */
+  models(): Promise<LoadedModel[]>;
   subscribe(listener: (state: HostState) => void): () => void;
 }
 
@@ -120,11 +131,19 @@ export function createHostAdapter(options: HostAdapterOptions): HostAdapter {
     }
   }
 
-  async function loadProject(): Promise<{ projectId?: string; projectName?: string }> {
+  async function loadProject(): Promise<{
+    projectId?: string;
+    projectName?: string;
+    projectLocation?: string;
+  }> {
     try {
       const project = await api?.project.getProject();
       if (project && typeof project.id === "string" && project.id.length > 0) {
-        return { projectId: project.id, projectName: project.name };
+        return {
+          projectId: project.id,
+          projectName: project.name,
+          ...(typeof project.location === "string" ? { projectLocation: project.location } : {}),
+        };
       }
     } catch {
       // The project is context only. The editor works without it.
@@ -232,6 +251,7 @@ export function createHostAdapter(options: HostAdapterOptions): HostAdapter {
       listeners.clear();
     },
     getState: () => state,
+    models: () => (api && !stopped ? loadedModels(api) : Promise.resolve([])),
     subscribe(listener) {
       listeners.add(listener);
       return () => {

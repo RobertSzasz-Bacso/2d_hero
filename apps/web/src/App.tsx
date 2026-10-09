@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button.tsx"
 import { Spinner } from "@/components/Busy.tsx"
 import Editor from "./editor/Editor.tsx"
@@ -21,7 +21,12 @@ function queryValue(name: string): string | null {
   return new URLSearchParams(window.location.search).get(name)
 }
 
-export default function App() {
+/** `hostedImport` adds another way to start an import. The hosted shell passes one in. */
+export default function App({
+  hostedImport,
+}: {
+  hostedImport?: (onProject: (projectId: string) => void) => ReactNode
+}) {
   const [projectId, setProjectId] = useState<string | null>(queryValue("project"))
   const [importId, setImportId] = useState<string | null>(queryValue("import"))
   const [projects, setProjects] = useState<ProjectSummary[]>([])
@@ -152,7 +157,9 @@ export default function App() {
       <Button type="button">2D Hero</Button>
       <p>Health: {health}</p>
       <AssistantPanel />
+      {hostedImport?.(openImport)}
       <ImportPanel onOpen={openProject} />
+      {hostedImport ? null : (
       <section className="flex w-full max-w-lg flex-col gap-2">
         <h2 className="text-sm font-medium">Projects</h2>
         {projectsState === "loading" ? (
@@ -200,6 +207,7 @@ export default function App() {
           )
         })}
       </section>
+      )}
       <Settings />
     </main>
   )

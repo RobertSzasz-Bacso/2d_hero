@@ -6,7 +6,6 @@ import { expect, test, type Page, type Route } from "@playwright/test"
 const HOST_ORIGIN = "http://localhost:5191"
 const TOKEN = "header-part.payload-part.signature-part"
 const SIGNED_URL = "https://files.example-cdn.test/blob/abc?X-Amz-Signature=SECRETSIG&Expires=9"
-const CORE = "https://app21.connect.trimble.com/tc/api/2.0"
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, content-type",
@@ -56,7 +55,7 @@ async function mount(page: Page, query = ""): Promise<Seen> {
       await reply({ message: "not mocked" }, 404)
     }
   })
-  await page.route("**/api/**", async (route: Route) => {
+  await page.route("http://127.0.0.1:5191/api/**", async (route: Route) => {
     const request = route.request()
     const url = new URL(request.url())
     seen.api.push({ method: request.method(), path: url.pathname, body: request.postData() })
@@ -148,12 +147,17 @@ test("the token and the download URL stay out of storage and the address bar", a
   }
 })
 
-test("models loaded in the viewer are listed and can be opened", async ({ page }) => {
+test("a loaded model is listed, and one that is not a file says so", async ({ page }) => {
   const seen = await mount(page, "&models=1")
   const frame = page.frameLocator("#ext")
 
   await expect(frame.getByTestId("trimble-model")).toContainText("Loaded Room.las")
-  expect(seen.api.length).toBeGreaterThan(0)
+  await frame.getByTestId("trimble-model").click()
+
+  // The mock Core API has no download URL for this model's file id (it answers 404).
+  await expect(frame.getByTestId("trimble-error")).toContainText("not available as a downloadable file")
+  expect(seen.core.some((call) => call.path.startsWith("/tc/api/2.0/files/fs/m-file/downloadurl"))).toBe(true)
+  expect(seen.api.some((call) => call.path === "/api/projects/from-url")).toBe(false)
 })
 
 test("a folder the user cannot read shows a no-access message", async ({ page }) => {
