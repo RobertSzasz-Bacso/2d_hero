@@ -12,6 +12,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 import jwt
@@ -64,7 +65,7 @@ def las_bytes(tmp_path_factory: pytest.TempPathFactory) -> bytes:
     cloud.y = points[:, 1]
     cloud.z = points[:, 2]
     path = tmp_path_factory.mktemp("las") / "scan.las"
-    cloud.write(path)
+    cast(Any, cloud).write(path)
     data = path.read_bytes()
     assert len(data) >= FIVE_MB
     return data
@@ -126,7 +127,7 @@ def serve(data: bytes, seen: list[httpx.Request] | None = None) -> Handler:
     def handler(request: httpx.Request) -> httpx.Response:
         if seen is not None:
             seen.append(request)
-        return httpx.Response(200, content=data, headers={"Content-Type": "application/octet-stream"})
+        return httpx.Response(200, content=data, headers={"Content-Type": "application/x-las"})
 
     return handler
 
@@ -143,7 +144,9 @@ def body(url: str = URL, **extra: object) -> dict[str, object]:
 
 
 @pytest.fixture
-def hosted(tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes) -> Iterator[TestClient]:
+def hosted(
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+) -> Iterator[TestClient]:
     with build(tmp_path, signing_key, serve(las_bytes)) as client:
         yield client
 
@@ -433,7 +436,7 @@ def test_cancelled_download_leaves_no_file_and_no_project(
         return httpx.Response(200, content=slow())
 
     token = make_token(signing_key)
-    result: dict[str, httpx.Response] = {}
+    result: dict[str, Any] = {}
     with build(tmp_path, signing_key, handler) as client:
 
         def post() -> None:

@@ -85,7 +85,11 @@ class ProjectStore:
         filename: str,
         read: Callable[[int], Awaitable[bytes]],
         name: str | None,
+        *,
+        limit: int = MAX_COPY_BYTES,
+        trimble_source: dict[str, str] | None = None,
     ) -> StoredProject:
+        """Copy chunks into a new project. ``limit`` is the byte cap; local copies keep 200 MB."""
         source_name, suffix = _source_names(filename)
         project_id = uuid.uuid4().hex
         folder = self.projects_dir / project_id
@@ -100,7 +104,7 @@ class ProjectStore:
                     if not chunk:
                         break
                     size += len(chunk)
-                    if size > MAX_COPY_BYTES:
+                    if size > limit:
                         raise FileTooLarge
                     handle.write(chunk)
             os.replace(temporary, destination)
@@ -110,6 +114,7 @@ class ProjectStore:
                 name=chosen,
                 source_file_name=source_name,
                 linked_path=None,
+                trimble_source=trimble_source,
             )
             self.remember(project_id)
         except Exception:
@@ -217,13 +222,17 @@ class ProjectStore:
         name: str,
         source_file_name: str,
         linked_path: str | None,
+        trimble_source: dict[str, str] | None = None,
     ) -> None:
-        meta = {
+        meta: dict[str, Any] = {
             "name": name,
             "createdAt": datetime.now(UTC).isoformat(),
             "sourceFileName": source_file_name,
             "linkedPath": linked_path,
         }
+        if trimble_source is not None:
+            # File id, version id, and name only. Never a URL or a token.
+            meta["trimbleSource"] = trimble_source
         atomic_write_text(
             folder / "project.json",
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n",

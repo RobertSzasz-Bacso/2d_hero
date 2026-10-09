@@ -23,6 +23,8 @@ logger = logging.getLogger("hero.hosted")
 DEFAULT_FRAME_ANCESTOR = "https://web.connect.trimble.com"
 MANIFEST_PATH = "/trimble/manifest.json"
 MAX_TOKEN_LENGTH = 8192
+# Hosted downloads have their own limit. The 200 MB copy limit in local mode is separate.
+DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 # Routes that read or write this PC: the native dialog, the Credential Manager key, and links.
 _LOCAL_ONLY_PREFIXES = ("/api/dialogs/",)
@@ -72,6 +74,8 @@ class HostedConfig:
     cors_origins: tuple[str, ...] = ()
     frame_ancestors: tuple[str, ...] = (DEFAULT_FRAME_ANCESTOR,)
     algorithms: tuple[str, ...] = ("RS256",)
+    download_hosts: tuple[str, ...] = ()
+    max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "HostedConfig":
@@ -108,6 +112,18 @@ class HostedConfig:
         if any(not _https_origin(origin) for origin in ancestors):
             problems.append("HERO_HOSTED_FRAME_ANCESTORS must list https origins")
 
+        download_hosts = _csv(env.get("HERO_TRIMBLE_DOWNLOAD_HOSTS"))
+        if any("*" in host or "/" in host or ":" in host for host in download_hosts):
+            problems.append("HERO_TRIMBLE_DOWNLOAD_HOSTS must list exact host names")
+
+        max_bytes = DEFAULT_MAX_DOWNLOAD_BYTES
+        raw_limit = env.get("HERO_TRIMBLE_MAX_DOWNLOAD_MB", "").strip()
+        if raw_limit:
+            if raw_limit.isdigit() and int(raw_limit) > 0:
+                max_bytes = int(raw_limit) * 1024 * 1024
+            else:
+                problems.append("HERO_TRIMBLE_MAX_DOWNLOAD_MB must be a positive whole number")
+
         if problems:
             raise HostedConfigError("Unsafe hosted settings: " + "; ".join(problems))
 
@@ -119,6 +135,8 @@ class HostedConfig:
             jwks_url=required["HERO_TRIMBLE_JWKS_URL"],
             cors_origins=tuple(_origin(origin) for origin in cors),
             frame_ancestors=tuple(_origin(origin) for origin in ancestors),
+            download_hosts=tuple(host.lower() for host in download_hosts),
+            max_download_bytes=max_bytes,
         )
 
 

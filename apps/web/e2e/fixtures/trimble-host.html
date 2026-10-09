@@ -28,7 +28,12 @@
             },
           },
           project: {
-            getProject: async () => ({ id: "proj-1", name: "Mock Tower" }),
+            getProject: async () => ({ id: "proj-1", name: "Mock Tower", location: "europe" }),
+          },
+          viewer: {
+            getModels: async () => new URLSearchParams(location.search).has("models")
+              ? [{ id: "m-file", versionId: "m-ver", name: "Loaded Room.las", type: "pointcloud", state: "loaded" }]
+              : [],
           },
         })
       }

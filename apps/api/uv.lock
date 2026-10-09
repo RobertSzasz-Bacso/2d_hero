@@ -325,6 +325,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "ifcopenshell" },
     { name = "keyring" },
     { name = "laspy" },
@@ -365,6 +366,7 @@ dev = [
 requires-dist = [
     { name = "cursor-sdk", marker = "extra == 'ai'", specifier = ">=1.0.35" },
     { name = "fastapi", specifier = ">=0.142.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "ifcopenshell", specifier = ">=0.9.0" },
     { name = "keyring", specifier = ">=25.7.0" },
     { name = "laspy", specifier = ">=2.7.0" },
