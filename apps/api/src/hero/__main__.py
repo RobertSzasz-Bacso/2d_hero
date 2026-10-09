@@ -48,10 +48,12 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("Session token stored")
 
     agent = None
+    ask = None
     if args.fake_agent:
-        from hero.ai.fake import e2e_agent
+        from hero.ai.fake import e2e_agent, e2e_ask
 
         agent = e2e_agent()
+        ask = e2e_ask
     app = create_app(
         token=token,
         config_dir=config_dir,
@@ -60,6 +62,7 @@ def main(argv: list[str] | None = None) -> None:
         dist_dir=web_dist(),
         open_file=ask_open_file,
         agent=agent,
+        ask=ask,
     )
     port = _choose_port(args.port)
     if not web_dist().is_dir():

@@ -20,7 +20,10 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 
 from hero.ai.agent import CursorPlanAgent, PlanAgent
+from hero.ai.chat import ask_cursor
+from hero.ai.identify import IdentifyError, identify_project, review_placement
 from hero.ai.service import accept_proposal, propose_edit, reject_proposal
+from hero.ai.session import ProposalError
 from hero.dialogs import ask_open_file
 from hero.errors import UNREADABLE, UnreadableFile
 from hero.jobs import (
@@ -32,7 +35,7 @@ from hero.jobs import (
     source_file,
     start_import,
 )
-from hero.keystore import cursor_key_is_set, delete_cursor_key, set_cursor_key
+from hero.keystore import cursor_key_is_set, delete_cursor_key, get_cursor_key, set_cursor_key
 from hero.paths import app_config_dir, default_projects_dir, web_dist
 from hero.pipeline.guess import guess_source
 from hero.projects import (
@@ -77,6 +80,29 @@ class ProposeBody(BaseModel):
     instruction: str
 
 
+class AskBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    message: str
+
+
+class IdentifyBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    image: str
+    projection: list[float]
+    matrixWorld: list[float]
+    floorZ: float = 0.0
+    overheadImage: str | None = None
+    overheadFrame: list[float] | None = None
+
+
+class ReviewBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    image: str
+
+
 def create_app(
     token: str,
     *,
@@ -86,6 +112,10 @@ def create_app(
     dist_dir: Path | None = None,
     open_file: Callable[[], str | None] | None = None,
     agent: PlanAgent | None = None,
+    ask: Callable[[str, str], str] | None = None,
+    see: Callable[[str, bytes, str], str] | None = None,
+    check: Callable[[str, bytes, bytes, str], str] | None = None,
+    mask: Callable[[str, bytes, bytes, str], bytes] | None = None,
 ) -> FastAPI:
     """Build the API. Session files are written only when paths are passed in."""
 
@@ -113,6 +143,8 @@ def create_app(
 
     chooser = open_file if open_file is not None else ask_open_file
     plan_agent = agent if agent is not None else CursorPlanAgent()
+    answer = ask if ask is not None else ask_cursor
+    look = see
 
     app = FastAPI(title="2D Hero", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(LocalSecurityMiddleware, token=token)
@@ -388,6 +420,118 @@ def create_app(
         if points.is_file():
             return FileResponse(points, media_type="application/octet-stream")
         return JSONResponse({"detail": "Preview is not ready."}, status_code=404)
+
+    @app.post("/api/cursor/ask")
+    def post_ask(body: AskBody) -> JSONResponse:
+        text = body.message.strip()
+        if not text:
+            return JSONResponse({"detail": "A message is required."}, status_code=400)
+        key = get_cursor_key()
+        if not key:
+            return JSONResponse({"cursorKeySet": False, "reply": ""})
+        try:
+            reply = answer(text, key)
+        except ProposalError as exc:
+            logger.info("cursor ask was not answered")
+            return JSONResponse({"cursorKeySet": True, "reply": "", "error": str(exc)})
+        except Exception:
+            logger.info("cursor ask failed")
+            return JSONResponse(
+                {"cursorKeySet": True, "reply": "", "error": "Cursor could not answer."}
+            )
+        logger.info("cursor ask answered")
+        return JSONResponse({"cursorKeySet": True, "reply": reply})
+
+    @app.get("/api/projects/{project_id}/identification.png", response_model=None)
+    def identification_image(project_id: str) -> FileResponse | JSONResponse:
+        try:
+            folder = project_store().project_dir(project_id)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        path = folder / "identification.png"
+        if not path.is_file():
+            return JSONResponse({"detail": "No identification image yet."}, status_code=404)
+        return FileResponse(path, media_type="image/png")
+
+    @app.post("/api/projects/{project_id}/identify")
+    def post_identify(project_id: str, body: IdentifyBody) -> JSONResponse:
+        key = get_cursor_key()
+        if not key:
+            return JSONResponse(
+                {
+                    "cursorKeySet": False,
+                    "detail": "No Cursor key is saved. Open Settings and save a key.",
+                }
+            )
+        try:
+            plan = identify_project(
+                project_store(),
+                project_id,
+                key,
+                image=body.image,
+                projection=body.projection,
+                matrix_world=body.matrixWorld,
+                floor_z=body.floorZ,
+                overhead_image=body.overheadImage,
+                overhead_frame=body.overheadFrame,
+                see=look,
+                mask=mask,
+            )
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        except ProposalError as exc:
+            logger.info("cursor identify was not answered: %s", exc)
+            return JSONResponse({"cursorKeySet": True, "detail": str(exc)})
+        except IdentifyError as exc:
+            logger.info("cursor identify could not place fixtures: %s", exc)
+            return JSONResponse({"cursorKeySet": True, "detail": str(exc)})
+        except Exception:
+            logger.info("cursor identify failed")
+            return JSONResponse(
+                {"cursorKeySet": True, "detail": "Cursor could not identify the furniture."}
+            )
+        logger.info("cursor identify placed fixtures")
+        return JSONResponse({"cursorKeySet": True, "plan": plan.model_dump(mode="json")})
+
+    @app.post("/api/projects/{project_id}/identify/review")
+    def post_identify_review(project_id: str, body: ReviewBody) -> JSONResponse:
+        key = get_cursor_key()
+        if not key:
+            return JSONResponse(
+                {
+                    "cursorKeySet": False,
+                    "detail": "No Cursor key is saved. Open Settings and save a key.",
+                }
+            )
+        try:
+            plan, accepted = review_placement(
+                project_store(),
+                project_id,
+                key,
+                image=body.image,
+                check=check,
+            )
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        except ProposalError as exc:
+            logger.info("cursor identify review was not answered: %s", exc)
+            return JSONResponse({"cursorKeySet": True, "detail": str(exc)})
+        except IdentifyError as exc:
+            logger.info("cursor identify review could not place fixtures: %s", exc)
+            return JSONResponse({"cursorKeySet": True, "detail": str(exc)})
+        except Exception:
+            logger.info("cursor identify review failed")
+            return JSONResponse(
+                {"cursorKeySet": True, "detail": "Cursor could not check the plan."}
+            )
+        logger.info("cursor identify review accepted=%s", accepted)
+        return JSONResponse(
+            {
+                "cursorKeySet": True,
+                "accepted": accepted,
+                "plan": plan.model_dump(mode="json"),
+            }
+        )
 
     @app.post("/api/projects/{project_id}/ai/propose")
     def post_proposal(project_id: str, body: ProposeBody) -> JSONResponse:

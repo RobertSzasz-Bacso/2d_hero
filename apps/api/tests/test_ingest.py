@@ -221,6 +221,32 @@ def test_las_reader_is_a_generator_and_downsample_stays_small(tmp_path: Path) ->
     assert peak < int(1.5 * 1024**3), f"downsample heap {peak / 1024**3:.2f} GB"
 
 
+def test_import_leaves_the_floor_plan_empty(tmp_path: Path) -> None:
+    from hero.schema import Plan
+
+    folder = tmp_path / "project"
+    folder.mkdir()
+    _write_obj(folder / "source.obj")
+    (folder / "project.json").write_text(
+        json.dumps(
+            {
+                "name": "Empty",
+                "createdAt": "2026-01-01T00:00:00+00:00",
+                "sourceFileName": "source.obj",
+                "linkedPath": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (folder / "plan.json").write_text(dump_plan(blank_plan("Empty")), encoding="utf-8")
+    outcome = execute_import(str(folder), units="auto", up_axis="auto")
+    assert outcome["state"] == "done"
+    plan = Plan.model_validate_json((folder / "plan.json").read_text(encoding="utf-8"))
+    assert plan.levels
+    assert plan.levels[0].walls == []
+    assert plan.levels[0].fixtures == []
+
+
 def test_cancel_does_not_write_a_plan(tmp_path: Path) -> None:
     folder = tmp_path / "project"
     folder.mkdir()

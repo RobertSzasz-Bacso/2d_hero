@@ -273,15 +273,6 @@ function PlanSvg(props: PlanSvgProps) {
       continue
     }
     if (element.kind === "room") {
-      nodes.push(
-        <g key={id} data-room-id={element.id} data-selected={selectedKeys.has(id) ? "true" : "false"} pointerEvents="none">
-          {items.map((item, index) =>
-            item.type === "text"
-              ? textNode(item, index, selectedKeys.has(id) ? SELECT_COLOR : INK, item.part === "area" ? { "data-testid": "room-area" } : { "data-part": item.part })
-              : null,
-          )}
-        </g>,
-      )
       continue
     }
     if (element.kind === "text") {

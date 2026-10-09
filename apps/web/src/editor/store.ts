@@ -201,7 +201,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!history || stage.width < 10 || stage.height < 10) {
       return
     }
-    const bounds = (level ? boundsOfPoints(level.vertices) : null) ?? underlayBounds
+    const bounds = (level ? boundsOfPoints(framePoints(level)) : null) ?? underlayBounds
     if (!bounds) {
       return
     }
@@ -447,6 +447,15 @@ async function flushSave(get: StoreGet, set: StoreSet): Promise<void> {
       void flushSave(get, set)
     }
   }
+}
+
+function framePoints(level: { vertices: readonly Point[]; fixtures: readonly Fixture[] }): Point[] {
+  const points = level.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }))
+  for (const fixture of level.fixtures) {
+    const reach = Math.max(fixture.width, fixture.depth) / 2
+    points.push({ x: fixture.x - reach, y: fixture.y - reach }, { x: fixture.x + reach, y: fixture.y + reach })
+  }
+  return points
 }
 
 async function readDetail(response: Response): Promise<string> {

@@ -4,6 +4,7 @@ type Saved = {
   levels: {
     vertices: { id: string; x: number; y: number }[]
     walls: { id: string; a: string; b: string; thickness: number }[]
+    rooms: { name: string }[]
     openings: { id: string; wall: string; offset: number; width: number; swingSide: string }[]
     fixtures: { symbol: string }[]
     dimensions: { id: string; auto: boolean; segments: { a: { type: string; id: string }; b: { type: string; id: string } }[] }[]
@@ -70,7 +71,7 @@ test("draw a room with the rectangle, door, symbol, and dimension tools", async 
   await page.keyboard.press("Tab")
   await page.keyboard.type("380")
   await page.keyboard.press("Enter")
-  await expect(page.getByTestId("room-area")).toHaveText("18.2 m²")
+  await expect.poll(async () => (await savedPlan(request, id)).levels[0]?.rooms.length ?? 0).toBe(1)
 
   await page.getByTestId("tool-door").click()
   const south = await page.locator('path[data-wall-id="w1"]').boundingBox()

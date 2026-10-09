@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button.tsx"
 import { Spinner } from "@/components/Busy.tsx"
 import Editor from "./editor/Editor.tsx"
+import AssistantPanel from "./editor/AssistantPanel.tsx"
 import ImportPanel from "./editor/ImportPanel.tsx"
 import { heroFetch } from "./session.ts"
 import Settings from "./settings.tsx"
@@ -150,6 +151,7 @@ export default function App() {
     <main className="flex min-h-svh flex-col items-start gap-4 p-8">
       <Button type="button">2D Hero</Button>
       <p>Health: {health}</p>
+      <AssistantPanel />
       <ImportPanel onOpen={openProject} />
       <section className="flex w-full max-w-lg flex-col gap-2">
         <h2 className="text-sm font-medium">Projects</h2>

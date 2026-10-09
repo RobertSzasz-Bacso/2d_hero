@@ -7,7 +7,7 @@ from pathlib import Path
 from hero.atomic import atomic_write_text
 from hero.pipeline.cells import draft_levels
 from hero.pipeline.fixtures import attach_fixtures
-from hero.pipeline.normalize import Normalized
+from hero.pipeline.normalize import LevelSlice, Normalized
 from hero.pipeline.openings import attach_structure
 from hero.pipeline.shells import np_argmax_abs
 from hero.pipeline.surfaces import SurfaceResult, detect_surfaces
@@ -133,8 +133,57 @@ def scan_plan(result: Normalized) -> Plan:
 
 def detect_plan(result: Normalized) -> tuple[list, SurfaceResult]:
     """Wall graph plus openings, columns, stairs, and fixtures."""
+    drafts, surfaces = detect_structure(result)
+    attach_fixtures(drafts, result)
+    return drafts, surfaces
+
+
+def detect_structure(result: Normalized) -> tuple[list, SurfaceResult]:
+    """Walls, rooms, and openings. Furniture is left for the picture."""
     surfaces = detect_surfaces(result)
-    return _populated(result, surfaces), surfaces
+    drafts = draft_levels(result, surfaces.faces)
+    attach_structure(drafts, result, surfaces.faces)
+    return drafts, surfaces
+
+
+def level_from_draft(draft) -> Level:
+    """One storey from a wall draft."""
+    return _level(draft)
+
+
+def write_shell_plan(folder: Path, result: Normalized, *, up_axis: str) -> None:
+    """Record the scan and leave the sheet empty until the user detects the room."""
+    plan_path = folder / "plan.json"
+    plan = Plan.model_validate_json(plan_path.read_text(encoding="utf-8"))
+    meta = json.loads((folder / "project.json").read_text(encoding="utf-8"))
+    filename = meta.get("sourceFileName")
+    name = filename if isinstance(filename, str) and filename else "source"
+    suffix = Path(name).suffix.lower()
+    linked = meta.get("linkedPath")
+    axis = up_axis if up_axis in {"x", "y", "z"} else "xyz"[int(np_argmax_abs(result.estimated_up))]
+    storeys = list(result.levels) or [LevelSlice(0.0, 2.7)]
+    plan.levels = [
+        Level(
+            id=f"L{index}",
+            name=f"Level {index}",
+            elevation=level.elevation,
+            ceilingHeight=level.ceiling_height if level.ceiling_height > 1.5 else 2.7,
+        )
+        for index, level in enumerate(storeys, start=1)
+    ]
+    plan.detection = Detection(
+        source=DetectionSource(
+            filename=name,
+            format=_FORMATS.get(suffix, "obj"),  # type: ignore[arg-type]
+            unitScaleToMeters=result.unit_scale if result.unit_scale > 0 else 1.0,
+            upAxis=axis,  # type: ignore[arg-type]
+            manhattanAngleDeg=result.manhattan_angle_deg,
+            linked=isinstance(linked, str) and bool(linked),
+        ),
+        issues=_issues(list(result.issues)),
+    )
+    plan.revision += 1
+    atomic_write_text(plan_path, dump_plan(plan))
 
 
 def _populated(result: Normalized, surfaces: SurfaceResult):

@@ -16,6 +16,7 @@ export default function ImportPanel({
   const [guess, setGuess] = useState<Guess | null>(null)
   const [units, setUnits] = useState("auto")
   const [upAxis, setUpAxis] = useState("auto")
+  const [replaceExisting, setReplaceExisting] = useState(false)
   const [progress, setProgress] = useState("")
   const [percent, setPercent] = useState(0)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -61,6 +62,7 @@ export default function ImportPanel({
         if (!active) {
           return
         }
+        setReplaceExisting(project.importState === "done")
         if (project.importState === "running" && project.jobId) {
           setBusy("")
           await follow(resumeId, project.jobId)
@@ -129,6 +131,7 @@ export default function ImportPanel({
   async function upload(file: File) {
     setError("")
     setGuess(null)
+    setReplaceExisting(false)
     setBusy("Copying file...")
     const body = new FormData()
     body.set("file", file)
@@ -218,7 +221,7 @@ export default function ImportPanel({
 
   return (
     <section className="relative flex w-full max-w-lg flex-col gap-3 rounded border border-slate-200 p-4">
-      <h2 className="text-sm font-medium">Import a scan</h2>
+      <h2 className="text-sm font-medium">{replaceExisting ? "Re-import scan" : "Import a scan"}</h2>
       <label className="flex cursor-pointer flex-col gap-2 rounded border border-dashed border-slate-300 p-4 text-sm">
         Drop a file or choose one
         <input
@@ -250,15 +253,21 @@ export default function ImportPanel({
           </label>
           <label className="flex items-center gap-2">
             Up axis
-            <select className="h-8 rounded border border-slate-300 px-2" value={upAxis} onChange={(event) => setUpAxis(event.target.value)}>
+            <select
+              className="h-8 rounded border border-slate-300 px-2"
+              data-testid="import-up-axis"
+              value={upAxis}
+              onChange={(event) => setUpAxis(event.target.value)}
+            >
               <option value="auto">auto</option>
               <option value="x">x</option>
               <option value="y">y</option>
               <option value="z">z</option>
             </select>
           </label>
+          {replaceExisting ? <p className="text-xs text-amber-700">Re-importing replaces the current detected plan.</p> : null}
           <Button type="button" data-testid="import-start" onClick={() => void start()} disabled={jobId !== null}>
-            Start import
+            {replaceExisting ? "Re-import" : "Start import"}
           </Button>
         </div>
       ) : null}

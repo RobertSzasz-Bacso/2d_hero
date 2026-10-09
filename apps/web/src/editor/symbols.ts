@@ -15,6 +15,21 @@ export const SYMBOLS: Fixture["symbol"][] = [
   "chair",
 ]
 
+export const SYMBOL_LABELS: Record<Fixture["symbol"], string> = {
+  toilet: "Toilet",
+  sink: "Sink",
+  bathtub: "Bathtub",
+  shower: "Shower",
+  "kitchen-counter": "Counter",
+  stove: "Stove",
+  "bed-double": "Double bed",
+  sofa: "Sofa",
+  table: "Table",
+  wardrobe: "Wardrobe",
+  block: "Block",
+  chair: "Chair",
+}
+
 type Polyline = Point[]
 
 function rect(x0: number, y0: number, x1: number, y1: number): Polyline {

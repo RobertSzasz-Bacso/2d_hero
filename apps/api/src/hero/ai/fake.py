@@ -66,6 +66,12 @@ class InstructionAgent:
         return list(session.ops)
 
 
+def e2e_ask(message: str, api_key: str) -> str:
+    """Reply without calling Cursor. The browser test reads this text."""
+    del api_key
+    return f"Cursor heard: {message}"
+
+
 def e2e_agent() -> InstructionAgent:
     """Install a memory keyring and a fake agent for the Playwright server."""
     keyring.set_keyring(_MemoryKeyring())

@@ -1,6 +1,9 @@
 import * as THREE from "three"
 
 const MAGIC = [0x48, 0x45, 0x52, 0x4f, 0x50, 0x54, 0x53, 0x00]
+export const POINT_SIZE_MIN_PX = 1
+export const POINT_SIZE_MAX_PX = 10
+export const DEFAULT_POINT_SIZE_PX = 4
 
 export type PointPreview = {
   positions: Float32Array
@@ -37,10 +40,15 @@ export function parsePointPreview(buffer: ArrayBuffer): PointPreview | null {
 }
 
 /** A fitted cloud. Point size is in pixels so a room stays visible when the camera frames it. */
-export function pointCloudObject(positions: Float32Array, colors: Uint8Array | null = null): THREE.Group {
+export function pointCloudObject(
+  positions: Float32Array,
+  colors: Uint8Array | null = null,
+  pointSize = DEFAULT_POINT_SIZE_PX,
+): THREE.Group {
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
-  const material = new THREE.PointsMaterial({ color: "#e2e8f0", size: 2, sizeAttenuation: false })
+  const size = Math.min(POINT_SIZE_MAX_PX, Math.max(POINT_SIZE_MIN_PX, pointSize))
+  const material = new THREE.PointsMaterial({ color: "#e2e8f0", size, sizeAttenuation: false })
   const colored = colors !== null && colors.length === positions.length
   if (colored && colors) {
     geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3, true))

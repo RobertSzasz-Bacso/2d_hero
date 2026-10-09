@@ -26,7 +26,13 @@ test("draw a rectangle, a door, a named room, and a toilet", async ({ page, requ
   await typedWall(page, "500", "180")
   await typedWall(page, "400", "270")
 
-  await expect(page.getByTestId("room-area")).toHaveText("18.2 m²")
+  await expect
+    .poll(async () => {
+      const response = await request.get(`/api/projects/${project.id}/plan`)
+      const body = (await response.json()) as { levels?: { rooms?: unknown[] }[] }
+      return body.levels?.[0]?.rooms?.length ?? 0
+    })
+    .toBe(1)
 
   await page.getByTestId("tool-door").click()
   await page.locator("[data-wall-id]").first().click()
@@ -36,12 +42,13 @@ test("draw a rectangle, a door, a named room, and a toilet", async ({ page, requ
   await clickStage(page, 300, 320)
   await page.getByTestId("room-name").fill("Kitchen")
   await page.getByTestId("room-name").press("Enter")
-  await expect(page.locator("[data-room-id]")).toContainText("Kitchen")
-  await expect(page.getByTestId("room-area")).toHaveText("18.2 m²")
+  await expect(page.getByTestId("room-name")).toHaveValue("Kitchen")
 
   await page.getByTestId("symbol-toilet").click()
   await clickStage(page, 240, 300)
   await expect(page.locator("[data-symbol=toilet]")).toBeVisible()
+  await page.locator("[data-symbol=toilet]").click()
+  await expect(page.getByTestId("prop-fixture-name")).toHaveText("Toilet")
 
   await page.getByTestId("tool-column").click()
   await clickStage(page, 160, 280)
@@ -75,7 +82,6 @@ test("draw a rectangle, a door, a named room, and a toilet", async ({ page, requ
   await page.reload()
   await expect(page.getByTestId("save-status")).toHaveText("Saved")
   await expect(page.locator("[data-symbol=toilet]")).toBeVisible()
-  await expect(page.locator("[data-room-id]")).toContainText("Kitchen")
   await expect(page.locator("[data-column-id]")).toHaveCount(1)
   await expect(page.locator("[data-stair-id]")).toHaveCount(1)
   const after = await request.get(`/api/projects/${project.id}/plan`)

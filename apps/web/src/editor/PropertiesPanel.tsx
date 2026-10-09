@@ -3,6 +3,7 @@ import { flipSwing, mergeCollinearWall } from "@/core/draw.ts"
 import { moveVertex, setFixtureRotation, setFixtureSize, setOpening, setRoomName, setTextContent, setWallThickness } from "@/core/ops.ts"
 import type { Level, Plan } from "@/core/plan-types.ts"
 import { useEditor } from "./store.ts"
+import { SYMBOL_LABELS } from "./symbols.ts"
 
 export default function PropertiesPanel() {
   const plan = useEditor((state) => state.history?.plan ?? null)
@@ -208,6 +209,12 @@ function FixtureFields({ plan, level, id }: { plan: Plan; level: Level; id: stri
   }
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
+        <span>Name</span>
+        <output className="flex h-8 items-center rounded border border-slate-200 bg-slate-100 px-2" data-testid="prop-fixture-name">
+          {SYMBOL_LABELS[fixture.symbol]}
+        </output>
+      </div>
       <Field label="Rotation (deg)" value={rotation} onChange={setRotation} onCommit={commit} testId="prop-rotation" />
       <Field
         label="Width (m)"

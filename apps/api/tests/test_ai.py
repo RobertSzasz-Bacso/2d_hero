@@ -351,3 +351,59 @@ def test_missing_key_ignores_the_environment_and_stays_off(
         assert "CURSOR_API_KEY" not in caplog.text
         assert (folder / "plan.json").read_bytes() == before
         assert os.environ["CURSOR_API_KEY"] == ENV_SECRET
+
+
+def test_bridge_discovery_can_be_read_from_a_pipe() -> None:
+    import json
+    import subprocess
+
+    import pytest
+
+    pytest.importorskip("cursor_sdk")
+    import cursor_sdk._bridge as bridge
+
+    from hero.ai.agent import use_pipe_wait
+
+    payload = json.dumps({"url": "http://127.0.0.1:9", "authToken": "token"})
+    prefix = bridge.READY_LINE_PREFIX
+    script = (
+        "import sys\n"
+        f"sys.stderr.write({prefix + payload + chr(10)!r})\n"
+        "sys.stderr.flush()\n"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", script],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        with use_pipe_wait():
+            discovery = bridge._read_discovery(process, timeout=2)
+    finally:
+        process.wait(timeout=2)
+    assert discovery["url"] == "http://127.0.0.1:9"
+
+
+def test_cursor_ask_returns_the_reply_and_hides_the_key(tmp_path: Path, token: str) -> None:
+    from hero.app import create_app
+    from hero.keystore import set_cursor_key
+
+    set_cursor_key(SECRET)
+    app = create_app(
+        token=token,
+        config_dir=tmp_path / "config",
+        projects_dir=tmp_path / "projects",
+        session_file=tmp_path / ".session-token",
+        open_file=lambda: None,
+        ask=lambda message, api_key: f"heard {message}",
+    )
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        response = client.post(
+            "/api/cursor/ask",
+            json={"message": "hello"},
+            headers=_headers(token),
+        )
+    assert response.status_code == 200
+    assert response.json() == {"cursorKeySet": True, "reply": "heard hello"}
+    assert SECRET not in response.text

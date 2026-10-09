@@ -3,23 +3,8 @@ import type { Fixture, Plan, Point } from "@/core/plan-types.ts"
 import { editorTolerances } from "@/core/tolerances.ts"
 import { screenToPlan } from "@/view/camera.ts"
 import { placeFixture } from "./draw-actions.ts"
-import { SYMBOLS, symbolPolylines } from "./symbols.ts"
+import { SYMBOLS, SYMBOL_LABELS, symbolPolylines } from "./symbols.ts"
 import { useEditor } from "./store.ts"
-
-const LABELS: Record<Fixture["symbol"], string> = {
-  toilet: "Toilet",
-  sink: "Sink",
-  bathtub: "Bathtub",
-  shower: "Shower",
-  "kitchen-counter": "Counter",
-  stove: "Stove",
-  "bed-double": "Double bed",
-  sofa: "Sofa",
-  table: "Table",
-  wardrobe: "Wardrobe",
-  block: "Block",
-  chair: "Chair",
-}
 
 function Thumbnail({ symbol }: { symbol: Fixture["symbol"] }) {
   return (
@@ -105,7 +90,7 @@ export default function SymbolLibrary() {
             key={id}
             type="button"
             draggable={false}
-            title={LABELS[id]}
+            title={SYMBOL_LABELS[id]}
             data-testid={`symbol-${id}`}
             className={`flex flex-col items-center rounded border px-0.5 py-1 text-[10px] leading-tight ${
               armed === id ? "border-blue-700 bg-blue-50 text-blue-800" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"
@@ -113,7 +98,7 @@ export default function SymbolLibrary() {
             onPointerDown={(event) => onPointerDown(id, event)}
           >
             <Thumbnail symbol={id} />
-            <span className="w-full truncate">{LABELS[id]}</span>
+            <span className="w-full truncate">{SYMBOL_LABELS[id]}</span>
           </button>
         ))}
       </div>

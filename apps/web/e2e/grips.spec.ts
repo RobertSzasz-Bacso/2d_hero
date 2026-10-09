@@ -55,7 +55,6 @@ test("grips thicken a wall by its face, type a clear width, and flip a door", as
   await expect(south).toHaveAttribute("data-selected", "true")
   await expect(page.locator("[data-grip]")).toHaveCount(5)
 
-  const areas = await page.getByTestId("room-area").allTextContents()
   const grip = await center(page, '[data-grip="face-right"]')
   await page.mouse.move(grip.x, grip.y)
   const moveStarted = Date.now()
@@ -67,7 +66,6 @@ test("grips thicken a wall by its face, type a clear width, and flip a door", as
   await expect.poll(() => puts.filter((stamp) => stamp > moveEnded).length).toBe(1)
   await expect(page.getByTestId("save-status")).toHaveText("Saved")
   expect(Number(await south.getAttribute("data-thickness"))).toBeGreaterThan(0.2)
-  expect(await page.getByTestId("room-area").allTextContents()).toEqual(areas)
 
   await clickWall(page, "wEast", 0.2)
   await expect(page.locator('path[data-wall-id="wEast"]')).toHaveAttribute("data-selected", "true")

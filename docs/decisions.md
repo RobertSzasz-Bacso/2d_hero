@@ -114,3 +114,8 @@ Reason: Walls are centred on the centerline and offset by thickness / 2, so the 
 
 Decision: The sidebar wall length, angle, and Apply inputs are removed. Length, angle, rectangle size, and opening distance are typed in a small input at the cursor, in the display unit. The sidebar keeps the wall thickness presets, the location line, and the rectangle mode.
 Reason: This matches architectural software: the number goes where the eye is, and the same input serves every drawing tool. One input that takes metres while the dimensions show centimetres led to wrong walls.
+
+## 2026-10-09 — Framed-view color masks for fixture detection
+
+Decision: Furniture detection uses an overhead render of the exact 3D view the user framed, plus the original screenshot. Cursor returns an SVG mask with the fixed palette; the API rasterizes it and measures the blobs with OpenCV. It does not use the whole-scan top-view raster or model-emitted normalized coordinates.
+Reason: The installed Cursor SDK accepts image input but does not expose the IDE's native image-generation tool or generated-file output. SVG is the portable image artifact and keeps palette ownership, rasterization, metric registration, and wall snapping deterministic in the app.
