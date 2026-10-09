@@ -1,4 +1,4 @@
-# 2D Hero — master plan
+﻿# 2D Hero — master plan
 
 2D Hero is a local Windows app. It turns a 3D scan or an IFC model into a metric European construction floor plan, lets one person edit that plan, and prints it to scale as PDF.
 
@@ -37,6 +37,7 @@ Status values: `not started`, `in progress`, `done`.
 - [x] Phase 18 — Direct editing with grips — `done`
 - [x] Phase 19 — Drawing tools — `done`
 - [ ] Phase 20 — Optional machine-learning detectors — `not started`
+- [x] Phase 21 — Trimble Connect hosted integration — `done`
 
 ## Decisions that every phase keeps
 
@@ -951,4 +952,54 @@ Add an optional detector sidecar that is off by default and is not imported by t
 Tests first: torch is not imported when the setting is off; invalid sidecar JSON is rejected; GPU tests skip without a GPU. The default test run must pass with no weights downloaded.
 
 Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-20.md. Commit message: "Phase 20: optional ML detectors". Do not push.
+```
+
+---
+
+## Phase 21 — Trimble Connect hosted integration
+
+**Status:** `done`
+
+**Requires:** Phase 19 done. Phase 20 remains optional and independent.
+
+**Goal:** run the existing editor as a hosted HTTPS Trimble Connect Workspace Extension with secure parent-provided authentication, while preserving the local Windows workflow.
+
+**In**
+
+- A hosted extension shell that initializes through the official `trimble-connect-workspace-api` package. The legacy `trimble-connect-project-workspace-api` is deprecated by Trimble; see `docs/decisions.md`.
+- Parent-provided OAuth access-token handling and project context behind a narrow web integration adapter.
+- Hosted backend authentication and CORS configuration separated from the loopback-only local security path.
+- Token handling that never persists access tokens in `localStorage`, `plan.json`, logs, or browser-visible settings.
+- Extension manifest and hosted API configuration without committed secrets.
+- Tests for local-mode compatibility, token non-persistence, missing/invalid hosted credentials, secret-free logs/responses, and a mocked iframe/parent API flow.
+- Documentation of the verified package version, manifest requirements, token claims, and deployment assumptions.
+
+**Out**
+
+- Downloading point clouds from Trimble Connect.
+- Running the import/detection pipeline from Trimble files.
+- Uploading generated plans back to Trimble Connect. These belong to a later phase.
+
+**Tests first**
+
+- Web unit tests: local session-token behavior remains unchanged; the Trimble adapter requests a parent token once, does not persist it, and handles an unavailable parent API.
+- API tests: hosted authentication accepts only the intended token path, rejects missing or invalid credentials, and never logs or returns the access token.
+- Playwright: a deterministic mocked parent `postMessage`/Workspace API loads the app in an iframe, shows connected state, and does not require a local session token.
+
+**Acceptance:** the hosted extension shell loads over HTTPS in Trimble Connect, obtains the parent-provided token through the verified official API, reaches the backend without leaking or persisting the token, and the same build still works locally with loopback session-token security.
+
+### Prompt
+
+```text
+Implement Phase 21 of 2D Hero in C:\prod\2d_hero. One phase only. Do not implement Phase 22.
+
+Read first: AGENTS.md, docs/handoff/phase-19.md, master_plan.md (Phase 21), docs/architecture.md, docs/libraries.md, docs/decisions.md, .cursor/rules/secrets.mdc.
+
+Build the hosted Trimble Connect Workspace Extension shell using the verified official trimble-connect-workspace-api package (the legacy project-workspace package is deprecated). Keep the editor independent of Trimble APIs behind a narrow adapter. Add secure hosted authentication and CORS configuration while preserving the existing local loopback session-token mode.
+
+Do not download point clouds, run Trimble file imports, or upload plans in this phase. Never persist or log a Trimble access token. Verify the installed package and official API contract before coding.
+
+Tests first: web adapter tests, hosted API authentication and secret-leak tests, and a deterministic mocked iframe/parent API Playwright flow. Run them and keep the failures before implementing.
+
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-21.md. Commit message: "Phase 21: Trimble Connect hosted integration". Do not push.
 ```

@@ -1,0 +1,2 @@
+# The golden SVG is compared byte for byte. Keep LF on Windows checkouts with core.autocrlf.
+apps/web/src/drawing/golden/*.svg text eol=lf

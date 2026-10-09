@@ -1,3 +1,5 @@
+import { hostBearer } from "./hostAuth.ts";
+
 export interface TokenHost {
   location: { hash: string; pathname: string; search: string };
   sessionStorage: Pick<Storage, "getItem" | "setItem">;
@@ -33,6 +35,10 @@ export function heroFetch(input: string, init: RequestInit = {}): Promise<Respon
   const token = sessionStorage.getItem(SESSION_KEY);
   if (token && !headers.has("X-Hero-Token")) {
     headers.set("X-Hero-Token", token);
+  }
+  const bearer = hostBearer.get();
+  if (!token && bearer && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${bearer}`);
   }
   return fetch(input, { ...init, headers });
 }

@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import secrets
 import socket
 import webbrowser
@@ -13,6 +14,7 @@ from fastapi import FastAPI
 
 from hero.app import create_app
 from hero.dialogs import ask_open_file
+from hero.hosted import HostedConfig, HostedConfigError
 from hero.paths import app_config_dir, default_projects_dir, default_session_file, web_dist
 from hero.session_file import write_token
 
@@ -36,9 +38,22 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Use an in-memory key and a scripted agent. Browser tests only.",
     )
+    parser.add_argument(
+        "--hosted",
+        action="store_true",
+        help="Run behind Trimble Connect. Settings come from HERO_HOSTED_* and HERO_TRIMBLE_*.",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address. Only used with --hosted, for a reverse proxy that terminates HTTPS.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    if args.hosted:
+        _run_hosted(args)
+        return
     token = secrets.token_urlsafe(32)
     config_dir = args.config_dir.resolve() if args.config_dir else app_config_dir()
     projects_dir = args.projects_dir.resolve() if args.projects_dir else default_projects_dir()
@@ -69,6 +84,25 @@ def main(argv: list[str] | None = None) -> None:
         logger.info("No web build at apps/web/dist; serving the API only")
     logger.info("Listening on http://127.0.0.1:%s", port)
     _serve(app, port=port, open_browser=not args.no_browser, token=token)
+
+
+def _run_hosted(args: argparse.Namespace) -> None:
+    """Serve the hosted app. No session file, no browser, no local token."""
+    try:
+        hosted = HostedConfig.from_env(os.environ)
+    except HostedConfigError as exc:
+        raise SystemExit(f"Hosted mode is not configured. {exc}") from None
+    projects_dir = args.projects_dir.resolve() if args.projects_dir else default_projects_dir()
+    config_dir = args.config_dir.resolve() if args.config_dir else app_config_dir()
+    app = create_app(
+        token=secrets.token_urlsafe(32),
+        config_dir=config_dir,
+        projects_dir=projects_dir,
+        dist_dir=web_dist(),
+        hosted=hosted,
+    )
+    logger.info("Hosted mode on %s:%s for %s", args.host, args.port, hosted.public_url)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", proxy_headers=False)
 
 
 def _choose_port(start: int) -> int:

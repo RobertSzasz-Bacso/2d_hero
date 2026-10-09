@@ -119,3 +119,27 @@ Reason: This matches architectural software: the number goes where the eye is, a
 
 Decision: Furniture detection uses the source scan's measured 3D geometry for placement, dimensions, and rotation. Cursor receives the framed view only to label ambiguous clusters; it cannot change their geometry. The color-mask path remains only as a fallback for projects without a readable geometry source.
 Reason: The Phase 13 detector already fits metric oriented boxes from the scan. The installed Cursor SDK accepts image input but does not expose the IDE's native image-generation tool or generated-file output, so generated images must not be the source of construction measurements.
+
+## 2026-10-09 — Trimble Connect integration boundary
+
+Decision: Trimble Connect is a hosted HTTPS integration phase, separate from the local Windows application. Phase 21 adds only the extension shell, parent-provided authentication, project context, and hosted API boundary; point-cloud transfer and plan upload are deferred.
+Reason: The current application intentionally binds to loopback and uses a local session token. Embedding it in Trimble Connect changes the deployment and authentication boundary and must not weaken local-mode security or make OAuth tokens persistent.
+## 2026-10-09 — Trimble Workspace API package
+
+Decision: Phase 21 uses `trimble-connect-workspace-api` 0.3.38, not `trimble-connect-project-workspace-api`. The owner confirmed this choice when the conflict was reported. `master_plan.md` and `docs/libraries.md` are updated.
+Reason: Trimble's documentation for the project-workspace package says it will stop working after the end of 2023 Q1 and names the workspace package as its replacement. The old package was last published in February 2023. The new one was published on 2026-10-06 and has `extension.requestPermission`, which replaces the deprecated `getPermission`.
+
+## 2026-10-09 — PyJWT for hosted tokens
+
+Decision: `pyjwt[crypto]` is a direct dependency of `apps/api`, and hosted mode checks the Trimble token with it (RS256, issuer JWKS, `iss`, `aud`, `exp` required).
+Reason: The token must be verified, not just decoded, and hand-written JWT or RSA code is not acceptable. PyJWT and `cryptography` were already installed through `mcp[crypto]`, so no new package enters the environment. Issuer, audience, and JWKS URL are settings with no default, because their values were not verified against a live Trimble token.
+
+## 2026-10-09 — Hosted mode closes the routes that act on the server PC
+
+Decision: In hosted mode the native file dialog, the Cursor key routes, and linked-file project creation return 403.
+Reason: They read or change the machine that runs the server. In local mode that machine is the user's. Hosted, it is not.
+
+## 2026-10-09 — Golden SVG line endings and the e2e API port
+
+Decision: `.gitattributes` keeps the golden SVG as LF. `scripts/e2e-server.ps1` reads `HERO_E2E_API_PORT` and defaults to 8091.
+Reason: With `core.autocrlf=true` the golden SVG checked out as CRLF, and the byte comparison in `drawing.test.ts` failed on this machine before any Phase 21 change. Port 8091 was held by an unrelated program here.

@@ -26,6 +26,15 @@ from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.ai.session import ProposalError
 from hero.dialogs import ask_open_file
 from hero.errors import UNREADABLE, UnreadableFile
+from hero.hosted import (
+    MANIFEST_PATH,
+    HostedConfig,
+    HostedSecurityMiddleware,
+    KeyProvider,
+    TokenVerifier,
+    jwks_key_provider,
+    manifest,
+)
 from hero.jobs import (
     JobBusy,
     cancel_job,
@@ -117,15 +126,22 @@ def create_app(
     check: Callable[[str, bytes, bytes, str], str] | None = None,
     mask: Callable[[str, bytes, bytes, str], bytes] | None = None,
     label: Callable[[str, list[bytes], str], str] | None = None,
+    hosted: HostedConfig | None = None,
+    key_provider: KeyProvider | None = None,
 ) -> FastAPI:
-    """Build the API. Session files are written only when paths are passed in."""
+    """Build the API. Session files are written only when paths are passed in.
+
+    With ``hosted`` the API runs behind Trimble Connect: a bearer token replaces the local
+    session token, and no session file is written.
+    """
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        if config_dir is not None:
-            write_token(config_dir / "session.token", token)
-        if session_file is not None:
-            write_token(session_file, token)
+        if hosted is None:
+            if config_dir is not None:
+                write_token(config_dir / "session.token", token)
+            if session_file is not None:
+                write_token(session_file, token)
         yield
         shutdown_pool()
 
@@ -148,19 +164,47 @@ def create_app(
     look = see
 
     app = FastAPI(title="2D Hero", lifespan=lifespan, docs_url=None, redoc_url=None)
-    app.add_middleware(LocalSecurityMiddleware, token=token)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_CORS_ORIGINS,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    if hosted is None:
+        app.add_middleware(LocalSecurityMiddleware, token=token)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=_CORS_ORIGINS,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        verifier = TokenVerifier(
+            hosted,
+            key_provider if key_provider is not None else jwks_key_provider(hosted),
+        )
+        app.add_middleware(HostedSecurityMiddleware, config=hosted, verifier=verifier)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(hosted.cors_origins),
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Authorization", "Content-Type", "If-Match"],
+            allow_credentials=False,
+        )
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled_exception)
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:
         return {"ok": True}
+
+    if hosted is not None:
+        hosted_config = hosted
+
+        @app.get("/api/hosted/session")
+        def hosted_session() -> dict[str, bool]:
+            return {"authenticated": True}
+
+        @app.get(MANIFEST_PATH)
+        def trimble_manifest() -> JSONResponse:
+            return JSONResponse(
+                manifest(hosted_config),
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
 
     @app.get("/api/settings")
     def get_settings() -> dict[str, object]:
@@ -208,6 +252,11 @@ def create_app(
                         status_code=400,
                     )
                 link_path = payload.get("linkPath")
+                if hosted is not None:
+                    return JSONResponse(
+                        {"detail": "Linking a file is not available in the hosted app."},
+                        status_code=403,
+                    )
                 raw_name = payload.get("name")
                 if not isinstance(link_path, str) or not link_path:
                     return JSONResponse(

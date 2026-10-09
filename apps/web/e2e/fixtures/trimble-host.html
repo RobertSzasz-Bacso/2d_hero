@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- A stand-in for the Trimble Connect web page. It runs the host side of the real
+     trimble-connect-workspace-api package. Tests open it as ?mode=direct|pending|denied|silent. -->
+<html lang="en">
+  <body>
+    <script src="/node_modules/trimble-connect-workspace-api/dist/iife/trimbleconnect.workspace.api.js"></script>
+    <script>
+      const TOKEN = "header-part.payload-part.signature-part"
+      const MODE = new URLSearchParams(location.search).get("mode") || "direct"
+      window.__log = []
+      window.addEventListener("message", TrimbleConnectWorkspace.dispatcherEventListener)
+      if (MODE !== "silent") {
+        TrimbleConnectWorkspace.expose({
+          onConnect() {
+            window.__log.push("connect")
+            if (MODE === "pending") {
+              setTimeout(() => {
+                TrimbleConnectWorkspace.sendEventToAllClients("extension.accessToken", { data: TOKEN })
+              }, 150)
+            }
+          },
+          extension: {
+            requestPermission: async (permission) => {
+              window.__log.push("requestPermission:" + permission)
+              if (MODE === "direct") return TOKEN
+              if (MODE === "denied") return "denied"
+              return "pending"
+            },
+          },
+          project: {
+            getProject: async () => ({ id: "proj-1", name: "Mock Tower" }),
+          },
+        })
+      }
+    </script>
+    <iframe id="ext" title="2D Hero" src="http://127.0.0.1:5191/" style="width: 1200px; height: 760px; border: 0"></iframe>
+  </body>
+</html>

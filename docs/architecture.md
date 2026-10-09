@@ -24,6 +24,21 @@ On startup the API creates a token with `secrets.token_urlsafe(32)`.
 
 The Cursor API key is not this token. See `.cursor/rules/secrets.mdc`.
 
+### Hosted mode (Trimble Connect)
+
+`uv run hero --hosted` serves the same app as a Trimble Connect extension behind an HTTPS reverse proxy. It is a separate path. Local mode above is unchanged, and `create_app` picks one or the other: a `HostedConfig` means hosted. `docs/trimble-connect.md` has the settings, the manifest, and the test steps.
+
+- Authentication: every `/api` route except `GET /api/health` needs `Authorization: Bearer <Trimble access token>`. The API checks the signature against the issuer's JWKS, plus `iss`, `aud`, and `exp`. `X-Hero-Token` is not accepted. No session file is written and no browser is opened.
+- Host: the `Host` header must be in `HERO_HOSTED_ALLOWED_HOSTS`. Loopback is not allowed unless listed.
+- CORS: only origins in `HERO_HOSTED_CORS_ORIGINS`, no wildcard, no credentials. The page and API are normally the same origin, so the list is usually empty.
+- Framing: every response carries `Content-Security-Policy: frame-ancestors <origins>`, default `https://web.connect.trimble.com`.
+- Closed routes: the native file dialog, the Cursor key routes, and `linkPath` project creation return 403. They act on the server's PC, not the user's.
+- `GET /api/hosted/session` returns `{ "authenticated": true }` and tells the shell the server accepts its token. It exists only in hosted mode.
+- `GET /trimble/manifest.json` is public and holds no secret.
+- The token is read, checked, and dropped. It is not logged, stored, or returned. In the browser it lives in memory (`hostAuth.ts`) and is never put in storage, a cookie, or the URL.
+
+The editor does not import Trimble code. `apps/web/src/integrations/trimble/` is the only place that does: `adapter.ts` is a DOM-free state machine, `origins.ts` holds the parent-origin checks, `connection.ts` calls the package, and `HostedGate.tsx` holds the editor back until a token is accepted. The shell is hosted when the page is in an iframe and has no local session token.
+
 ## Project files
 
 Resolve folders with `platformdirs`, then pin the Windows result:

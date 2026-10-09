@@ -27,6 +27,7 @@ Verify the import and the function signature in the installed version before wri
 | `sse-starlette` | `sse_starlette` | Job events. |
 | `mcp` | `mcp` | Phase 15 tools. |
 | `cursor-sdk` | `cursor_sdk` | Phase 15 only. Optional extra, not required for tests. |
+| `pyjwt[crypto]` | `jwt` | Phase 21. Checks the Trimble access token in hosted mode (RS256, JWKS). |
 | `pytest`, `httpx` | | Tests. |
 
 Pin versions in `pyproject.toml` once Phase 1 has installed a working set. Do not leave ranges that float across a phase boundary without a lockfile (`uv.lock` is committed).
@@ -60,6 +61,7 @@ Do not import these:
 | `polygon-clipping` | Wall union and room faces. |
 | `pdf-lib` | Vector PDF. |
 | `zustand` | Editor UI state, not the plan kernel's history. |
+| `trimble-connect-workspace-api` | Phase 21. Talks to the Trimble Connect parent page. Imported only in `src/integrations/trimble/connection.ts`. Pinned exactly. |
 | `vitest`, `@playwright/test`, `@testing-library/react` | Tests. |
 
 The plan kernel must not depend on `react` or `three`. The editor plan view is plain SVG in React, drawn from `src/drawing/scene.ts`. It needs no canvas library.

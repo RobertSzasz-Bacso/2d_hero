@@ -11,7 +11,8 @@ alwaysApply: false
 - Paths are `pathlib`. Writes are temp file + `os.replace` in the same directory.
 - Numeric work is NumPy. No Python loop over point clouds.
 - One heavy job at a time, in a process pool. Route handlers return quickly.
-- Bind `127.0.0.1` only. Every `/api` route except `GET /api/health` requires `X-Hero-Token` and a local `Host`.
+- Local mode binds `127.0.0.1` only. Every `/api` route except `GET /api/health` requires `X-Hero-Token` and a local `Host`.
+- Hosted mode (`--hosted`, `hero.hosted`) requires a verified Trimble bearer token and a listed `Host` instead. It is a separate path. Do not loosen the local checks for it.
 - Tests use `tmp_path` and an in-memory keyring. They never touch `Documents\2D Hero` or the real Credential Manager.
 
 ```python
