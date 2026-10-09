@@ -4,11 +4,13 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from json import JSONDecodeError
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +27,29 @@ from hero.ai.identify import IdentifyError, has_geometry_source, identify_projec
 from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.ai.session import ProposalError
 from hero.dialogs import ask_open_file
+from hero.download import (
+    DownloadCancelled,
+    DownloadFailed,
+    DownloadRejected,
+    DownloadTooLarge,
+    Resolver,
+    Transfers,
+    check_file_name,
+    chunk_reader,
+    declared_size,
+    open_download,
+    system_resolver,
+)
 from hero.errors import UNREADABLE, UnreadableFile, UnsupportedSource
+from hero.hosted import (
+    MANIFEST_PATH,
+    HostedConfig,
+    HostedSecurityMiddleware,
+    KeyProvider,
+    TokenVerifier,
+    jwks_key_provider,
+    manifest,
+)
 from hero.jobs import (
     JobBusy,
     cancel_job,
@@ -74,6 +98,17 @@ class ImportJobBody(BaseModel):
     upAxis: str = "auto"
 
 
+class FromUrlBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    url: str
+    fileName: str
+    fileId: str
+    versionId: str
+    name: str | None = None
+    transferId: str | None = None
+
+
 class ProposeBody(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -117,15 +152,24 @@ def create_app(
     check: Callable[[str, bytes, bytes, str], str] | None = None,
     mask: Callable[[str, bytes, bytes, str], bytes] | None = None,
     label: Callable[[str, list[bytes], str], str] | None = None,
+    hosted: HostedConfig | None = None,
+    key_provider: KeyProvider | None = None,
+    download_transport: httpx.AsyncBaseTransport | None = None,
+    resolver: Resolver | None = None,
 ) -> FastAPI:
-    """Build the API. Session files are written only when paths are passed in."""
+    """Build the API. Session files are written only when paths are passed in.
+
+    With ``hosted`` the API runs behind Trimble Connect: a bearer token replaces the local
+    session token, and no session file is written.
+    """
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        if config_dir is not None:
-            write_token(config_dir / "session.token", token)
-        if session_file is not None:
-            write_token(session_file, token)
+        if hosted is None:
+            if config_dir is not None:
+                write_token(config_dir / "session.token", token)
+            if session_file is not None:
+                write_token(session_file, token)
         yield
         shutdown_pool()
 
@@ -148,19 +192,47 @@ def create_app(
     look = see
 
     app = FastAPI(title="2D Hero", lifespan=lifespan, docs_url=None, redoc_url=None)
-    app.add_middleware(LocalSecurityMiddleware, token=token)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_CORS_ORIGINS,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    if hosted is None:
+        app.add_middleware(LocalSecurityMiddleware, token=token)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=_CORS_ORIGINS,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        verifier = TokenVerifier(
+            hosted,
+            key_provider if key_provider is not None else jwks_key_provider(hosted),
+        )
+        app.add_middleware(HostedSecurityMiddleware, config=hosted, verifier=verifier)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(hosted.cors_origins),
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Authorization", "Content-Type", "If-Match"],
+            allow_credentials=False,
+        )
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled_exception)
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:
         return {"ok": True}
+
+    if hosted is not None:
+        hosted_config = hosted
+
+        @app.get("/api/hosted/session")
+        def hosted_session() -> dict[str, bool]:
+            return {"authenticated": True}
+
+        @app.get(MANIFEST_PATH)
+        def trimble_manifest() -> JSONResponse:
+            return JSONResponse(
+                manifest(hosted_config),
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
 
     @app.get("/api/settings")
     def get_settings() -> dict[str, object]:
@@ -208,6 +280,11 @@ def create_app(
                         status_code=400,
                     )
                 link_path = payload.get("linkPath")
+                if hosted is not None:
+                    return JSONResponse(
+                        {"detail": "Linking a file is not available in the hosted app."},
+                        status_code=403,
+                    )
                 raw_name = payload.get("name")
                 if not isinstance(link_path, str) or not link_path:
                     return JSONResponse(
@@ -245,6 +322,80 @@ def create_app(
             return JSONResponse({"detail": "Request was not valid."}, status_code=422)
         store = project_store()
         return JSONResponse(_with_import_status(store, store.describe(stored.id)))
+
+    transfers = Transfers()
+    resolve_host = resolver if resolver is not None else system_resolver
+
+    @app.post("/api/projects/from-url")
+    async def create_project_from_url(body: FromUrlBody) -> JSONResponse:
+        """Hosted only. The browser sends the signed download URL, never the Trimble token."""
+        if hosted is None:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        transfer_id = body.transferId if body.transferId is not None else uuid.uuid4().hex
+        try:
+            file_name = check_file_name(body.fileName)
+            if not Transfers.valid_id(transfer_id):
+                raise DownloadRejected("The transfer id is not valid.")
+            transfer = transfers.begin(transfer_id)
+        except DownloadRejected as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        try:
+            async with open_download(
+                body.url,
+                hosted.download_hosts,
+                transport=download_transport,
+                resolve=resolve_host,
+            ) as response:
+                total = declared_size(response)
+                if total is not None and total > hosted.max_download_bytes:
+                    raise DownloadTooLarge
+                transfer.total = total
+                stored = await project_store().create_from_chunks(
+                    file_name,
+                    chunk_reader(response, transfer),
+                    body.name,
+                    limit=hosted.max_download_bytes,
+                    trimble_source={
+                        "fileId": body.fileId,
+                        "versionId": body.versionId,
+                        "name": file_name,
+                    },
+                )
+        except DownloadRejected as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        except DownloadCancelled:
+            logger.info("hosted download cancelled")
+            return JSONResponse({"detail": "The download was cancelled."}, status_code=409)
+        except (DownloadTooLarge, FileTooLarge):
+            return JSONResponse(
+                {"detail": "This file is over the size limit for hosted downloads."},
+                status_code=413,
+            )
+        except DownloadFailed as exc:
+            logger.info("hosted download failed")
+            return JSONResponse({"detail": str(exc)}, status_code=502)
+        except Exception as exc:
+            # Only the type is logged: a library message can carry the signed URL.
+            logger.info("hosted download failed: %s", type(exc).__name__)
+            return JSONResponse({"detail": "The file could not be downloaded."}, status_code=502)
+        finally:
+            transfers.end(transfer_id)
+        logger.info("hosted download stored %d bytes", transfer.bytes)
+        store = project_store()
+        return JSONResponse(_with_import_status(store, store.describe(stored.id)))
+
+    @app.get("/api/transfers/{transfer_id}")
+    def get_transfer(transfer_id: str) -> JSONResponse:
+        found = transfers.get(transfer_id) if hosted is not None else None
+        if found is None:
+            return JSONResponse({"detail": "Transfer was not found."}, status_code=404)
+        return JSONResponse(found.snapshot())
+
+    @app.post("/api/transfers/{transfer_id}/cancel")
+    def cancel_transfer(transfer_id: str) -> JSONResponse:
+        if hosted is None or not transfers.cancel(transfer_id):
+            return JSONResponse({"detail": "Transfer was not found."}, status_code=404)
+        return JSONResponse({"state": "cancelled"})
 
     @app.post("/api/dialogs/open-file")
     def open_file_dialog() -> JSONResponse:

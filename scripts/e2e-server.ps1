@@ -20,7 +20,8 @@ if (Test-Path $tmp) {
 New-Item -ItemType Directory -Path (Join-Path $tmp "projects") | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $tmp "config") | Out-Null
 
-foreach ($port in 8091, 5191) {
+$apiPort = if ($env:HERO_E2E_API_PORT) { [int]$env:HERO_E2E_API_PORT } else { 8091 }
+foreach ($port in $apiPort, 5191) {
   $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), $port)
   try {
     $listener.Start()
@@ -35,7 +36,7 @@ foreach ($port in 8091, 5191) {
 
 $sessionFile = Join-Path $tmp "session.token"
 $api = Start-Process -FilePath $uv -ArgumentList @(
-  "run", "hero", "--no-browser", "--fake-agent", "--port", "8091",
+  "run", "hero", "--no-browser", "--fake-agent", "--port", "$apiPort",
   "--projects-dir", (Join-Path $tmp "projects"),
   "--config-dir", (Join-Path $tmp "config"),
   "--session-file", $sessionFile
@@ -51,7 +52,7 @@ while ((Get-Date) -lt $deadline) {
     throw "The API exited before it was ready."
   }
   try {
-    $response = Invoke-WebRequest -Uri "http://127.0.0.1:8091/api/health" -UseBasicParsing -TimeoutSec 2
+    $response = Invoke-WebRequest -Uri "http://127.0.0.1:$apiPort/api/health" -UseBasicParsing -TimeoutSec 2
     if ($response.StatusCode -eq 200) {
       $ready = $true
       break
@@ -65,13 +66,15 @@ if (-not $ready) {
   if (-not $api.HasExited) {
     Stop-Process -Id $api.Id -Force
   }
-  throw "The API did not become ready on http://127.0.0.1:8091."
+  throw "The API did not become ready on http://127.0.0.1:$apiPort."
 }
 
 try {
   Set-Location $webDir
-  $env:HERO_API_PORT = "8091"
+  $env:HERO_API_PORT = "$apiPort"
   $env:HERO_SESSION_FILE = $sessionFile
+  # The mocked Trimble Connect parent page in e2e/trimble-host.spec.ts.
+  $env:VITE_TRIMBLE_PARENT_ORIGINS = "http://localhost:5191"
   npm run dev -- --host 127.0.0.1 --port 5191 --strictPort
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE

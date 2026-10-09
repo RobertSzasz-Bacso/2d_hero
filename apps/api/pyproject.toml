@@ -5,6 +5,7 @@ description = "Local API for 2D Hero"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.142.2",
+    "httpx>=0.28.1",
     "keyring>=25.7.0",
     "mcp>=2.3.0",
     "networkx>=3.7",
@@ -14,6 +15,7 @@ dependencies = [
     "pillow>=12.3.0",
     "platformdirs>=4.12.3",
     "pydantic>=2.13.5",
+    "pyjwt[crypto]>=2.15.1",
     "python-multipart>=0.0.32",
     "scipy>=1.18.1",
     "shapely>=2.1.2",

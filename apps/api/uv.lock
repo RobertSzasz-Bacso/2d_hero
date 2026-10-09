@@ -325,6 +325,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "keyring" },
     { name = "mcp" },
     { name = "networkx" },
@@ -334,6 +335,7 @@ dependencies = [
     { name = "pillow" },
     { name = "platformdirs" },
     { name = "pydantic" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "scipy" },
     { name = "shapely" },
@@ -359,6 +361,7 @@ dev = [
 requires-dist = [
     { name = "cursor-sdk", marker = "extra == 'ai'", specifier = ">=1.0.35" },
     { name = "fastapi", specifier = ">=0.142.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "keyring", specifier = ">=25.7.0" },
     { name = "mcp", specifier = ">=2.3.0" },
     { name = "networkx", specifier = ">=3.7" },
@@ -368,6 +371,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "platformdirs", specifier = ">=4.12.3" },
     { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.1" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "shapely", specifier = ">=2.1.2" },
