@@ -26,7 +26,7 @@ from hero.pipeline.cloud import read_cloud
 from hero.pipeline.normalize import normalize_scene
 from hero.pipeline.planwrite import scan_plan
 from hero.projects import ProjectNotFound, ProjectStore, RevisionConflict
-from hero.schema import Fixture, Plan
+from hero.schema import Fixture, Level, Plan
 
 SeeImage = Callable[[str, bytes, str], str]
 CheckPlan = Callable[[str, bytes, bytes, str], str]
@@ -237,8 +237,7 @@ def identify_project(
     talk = _Talk.start(folder)
     talk.prompt(prompt, api_key, image=png)
     plan = store.read_plan(project_id)
-    if not plan.levels:
-        raise IdentifyError("This project has no storey yet.")
+    plan = _ensure_level(plan, measured[0] if measured is not None else None)
 
     def judge(reply: str) -> str:
         return placement_report(reply, shot, bounds)
@@ -250,8 +249,6 @@ def identify_project(
         found = parse_fixtures(reply, shot)
     except (ValueError, TypeError) as exc:
         raise IdentifyError("Cursor did not return fixture JSON.") from exc
-    if measured is not None:
-        plan = _apply_level(plan, measured[0])
     updated = _place(plan, cast(list[ParsedFixture], found))
     try:
         return store.save_plan(project_id, updated, if_match=plan.revision)
@@ -323,10 +320,7 @@ def _identify_from_mask(
         talk.stopped(message, api_key)
         raise IdentifyError(message)
     plan = store.read_plan(project_id)
-    if not plan.levels:
-        raise IdentifyError("This project has no storey yet.")
-    if measured is not None:
-        plan = _apply_level(plan, measured[0])
+    plan = _ensure_level(plan, measured[0] if measured is not None else None)
     updated = _place(plan, cast(list[ParsedFixture], found))
     try:
         return store.save_plan(project_id, updated, if_match=plan.revision)
@@ -659,7 +653,7 @@ def _review_prompt(previous: str) -> str:
 
 
 def placement_report(text: str, shot: ViewShot, bounds: RoomBounds | None) -> str:
-    """Empty when every object lies inside the room. Otherwise the note sent back to Cursor."""
+    """Empty when every object lies inside the room. Otherwise report the problem."""
     if bounds is None:
         return ""
     try:
@@ -799,11 +793,24 @@ def _measure(folder: Any) -> tuple[Any, RoomBounds] | None:
 
 
 def _apply_level(plan: Plan, level: Any) -> Plan:
+    if not plan.levels:
+        return plan.model_copy(update={"levels": [level]})
     current = plan.levels[0]
     replacement = level.model_copy(
         update={"id": current.id, "name": current.name, "fixtures": []}
     )
     return plan.model_copy(update={"levels": [replacement, *plan.levels[1:]]})
+
+
+def _ensure_level(plan: Plan, measured: Level | None) -> Plan:
+    if measured is not None:
+        return _apply_level(plan, measured)
+    if plan.levels:
+        return plan
+    return _apply_level(
+        plan,
+        Level(id="L1", name="Level 1", elevation=0.0, ceilingHeight=2.7),
+    )
 
 
 def _prompt(shot: ViewShot, bounds: RoomBounds | None = None) -> str:

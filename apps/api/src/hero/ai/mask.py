@@ -5,12 +5,11 @@ from __future__ import annotations
 import io
 import math
 from dataclasses import dataclass
-from typing import Any, cast
 
 import cv2
 import numpy as np
 from PIL import Image
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 
 from hero.ai.room import RoomBounds
 
@@ -85,25 +84,15 @@ def decode_mask(png: bytes, frame: MaskFrame, bounds: RoomBounds) -> list[MaskFi
     floor = (nearest == floor_index) & (nearest_distance <= _COLOUR_TOLERANCE)
     if int(floor.sum()) < max(10, int(width * height * 0.01)):
         raise ValueError("The Cursor mask has no recognizable floor region.")
-    floor_pixels = np.argwhere(floor)
-    floor_y_min, floor_x_min = floor_pixels.min(axis=0)
-    floor_y_max, floor_x_max = floor_pixels.max(axis=0)
-    floor_window = (
-        float(floor_x_min),
-        float(floor_x_max),
-        float(floor_y_min),
-        float(floor_y_max),
-    )
 
     result: list[MaskFixture] = []
-    cv2_any = cast(Any, cv2)
     for symbol in _SYMBOLS:
         symbol_index = palette_names.index(symbol)
         pixels = ((nearest == symbol_index) & (nearest_distance <= _COLOUR_TOLERANCE)).astype(
             np.uint8
         )
         pixels = cv2.morphologyEx(pixels, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-        count, labels, stats, _centroids = cv2_any.connectedComponentsWithStats(pixels, 8)
+        count, labels, stats, _centroids = cv2.connectedComponentsWithStats(pixels, 8)
         minimum_area = max(12, int(width * height * 0.00015))
         for label in range(1, count):
             if int(stats[label, cv2.CC_STAT_AREA]) < minimum_area:
@@ -117,17 +106,7 @@ def decode_mask(png: bytes, frame: MaskFrame, bounds: RoomBounds) -> list[MaskFi
             contour = max(contours, key=cv2.contourArea)
             if cv2.contourArea(contour) < minimum_area:
                 continue
-            result.append(
-                _fixture_from_contour(
-                    symbol,
-                    contour,
-                    width,
-                    height,
-                    frame,
-                    bounds,
-                    floor_window,
-                )
-            )
+            result.append(_fixture_from_contour(symbol, contour, width, height, frame, bounds))
     return result
 
 
@@ -146,23 +125,11 @@ def _fixture_from_contour(
     image_height: int,
     frame: MaskFrame,
     bounds: RoomBounds,
-    floor_window: tuple[float, float, float, float],
 ) -> MaskFixture:
     rectangle = cv2.minAreaRect(contour)
     corners = cv2.boxPoints(rectangle).astype(np.float64)
     world = np.asarray(
-        [
-            _world_at(
-                float(x),
-                float(y),
-                image_width,
-                image_height,
-                frame,
-                bounds,
-                floor_window,
-            )
-            for x, y in corners
-        ]
+        [_world_at(float(x), float(y), image_width, image_height, frame) for x, y in corners]
     )
     edges = np.roll(world, -1, axis=0) - world
     lengths = np.linalg.norm(edges, axis=1)
@@ -197,22 +164,17 @@ def _world_at(
     image_width: int,
     image_height: int,
     frame: MaskFrame,
-    bounds: RoomBounds,
-    floor_window: tuple[float, float, float, float],
 ) -> np.ndarray:
-    floor_x_min, floor_x_max, floor_y_min, floor_y_max = floor_window
-    floor_width = max(1.0, floor_x_max - floor_x_min)
-    floor_height = max(1.0, floor_y_max - floor_y_min)
-    u = (pixel_x - floor_x_min) / floor_width
-    v = 1.0 - (pixel_y - floor_y_min) / floor_height
-    return np.asarray(
-        (bounds.min_x + u * bounds.width, bounds.min_y + v * bounds.depth),
-        dtype=np.float64,
-    )
+    u = pixel_x / max(1, image_width - 1)
+    v = 1.0 - pixel_y / max(1, image_height - 1)
+    return np.asarray(frame.origin) + u * np.asarray(frame.x_axis) + v * np.asarray(frame.y_axis)
 
 
 def _snap_to_wall(item: MaskFixture, bounds: RoomBounds) -> MaskFixture:
     corners = _corners(item)
+    footprint = Polygon([(float(point[0]), float(point[1])) for point in corners])
+    if not footprint.is_valid or not footprint.intersects(bounds.polygon):
+        return item
     best: tuple[float, float, float] | None = None
     boundary = list(bounds.polygon.exterior.coords)
     for start, end in zip(boundary, boundary[1:]):
@@ -232,7 +194,7 @@ def _snap_to_wall(item: MaskFixture, bounds: RoomBounds) -> MaskFixture:
             if abs(cross) > _PARALLEL_SIN:
                 continue
             gap = float(np.dot((corners[index] + corners[(index + 1) % 4]) / 2.0 - start, normal))
-            if not 0.0 <= gap <= _WALL_SNAP_M:
+            if gap > _WALL_SNAP_M:
                 continue
             delta = -normal * gap
             shifted = [

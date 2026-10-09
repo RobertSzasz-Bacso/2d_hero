@@ -72,7 +72,7 @@ def test_mask_places_wall_adjacent_fixtures_and_measures_their_full_boxes() -> N
     assert tub.depth == pytest.approx(0.60, abs=0.04)
 
 
-def test_mask_normalizes_a_camera_frame_to_the_measured_floor() -> None:
+def test_mask_keeps_the_metric_camera_frame_when_floor_mask_is_padded() -> None:
     image = Image.new("RGB", (400, 300), (0, 0, 0))
     draw = ImageDraw.Draw(image)
     draw.rectangle((50, 30, 349, 269), fill=MASK_PALETTE["floor"])
@@ -87,10 +87,10 @@ def test_mask_normalizes_a_camera_frame_to_the_measured_floor() -> None:
     )
 
     toilet = next(item for item in found if item.symbol == "toilet")
-    assert toilet.x == pytest.approx(1.45, abs=0.04)
-    assert toilet.y == pytest.approx(1.10, abs=0.04)
-    assert toilet.width == pytest.approx(0.50, abs=0.04)
-    assert toilet.depth == pytest.approx(0.60, abs=0.04)
+    assert toilet.x == pytest.approx(0.41, abs=0.04)
+    assert toilet.y == pytest.approx(0.80, abs=0.04)
+    assert toilet.width == pytest.approx(0.86, abs=0.04)
+    assert toilet.depth == pytest.approx(1.18, abs=0.04)
 
 
 def test_mask_snaps_ten_centimetres_to_wall_but_not_fifty() -> None:
@@ -104,6 +104,21 @@ def test_mask_snaps_ten_centimetres_to_wall_but_not_fifty() -> None:
     assert near_toilet.x - near_toilet.width / 2.0 == pytest.approx(0.0, abs=0.01)
     assert far_toilet.x - far_toilet.width / 2.0 > 0.35
     assert near_right < far_right
+
+
+def test_mask_moves_a_wall_touching_object_inside_when_the_mask_spills_over_the_wall() -> None:
+    image = Image.new("RGB", (300, 240), MASK_PALETTE["floor"])
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((250, 80, 299, 140), fill=MASK_PALETTE["toilet"])
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+
+    frame = MaskFrame(origin=(0.0, 0.0), x_axis=(3.3, 0.0), y_axis=(0.0, 2.4))
+    found = decode_mask(output.getvalue(), frame, _bounds())
+    toilet = next(item for item in found if item.symbol == "toilet")
+
+    assert toilet.x + toilet.width / 2.0 == pytest.approx(3.0, abs=0.03)
+    assert toilet.width == pytest.approx(0.54, abs=0.03)
 
 
 def test_mask_accepts_antialiased_edges() -> None:
