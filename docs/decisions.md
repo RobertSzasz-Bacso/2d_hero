@@ -158,3 +158,8 @@ Reason: The signed URL needs no `Authorization` header, so the server does not n
 
 Decision: `httpx` moves from the dev group to the dependencies of `apps/api`.
 Reason: `hero.download` streams the signed URL with it. It was already installed for the tests and already on the library list. Starlette's test client uses `httpx2`, which is unrelated.
+
+## 2026-10-09  The PDF goes to Trimble Connect from the browser
+
+Decision: In hosted mode the browser uploads the finished PDF straight to the Trimble Connect Core API with the parent token (initiate, send, commit). The backend only receives where the file landed (PUT /api/projects/{id}/trimble-export: file id, version id, folder id, name, time). It never gets the PDF, the token, or the signed upload URL. No new dependency.
+Reason: AGENTS.md puts PDF creation in the browser and forbids a server PDF route. The backend does not need the token for an upload, so it is not sent there. The signed upload URL is a secret like the download URL, so it is called with no Authorization header and is never stored, logged, or put in an error.

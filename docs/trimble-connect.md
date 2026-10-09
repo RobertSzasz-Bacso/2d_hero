@@ -135,3 +135,37 @@ A point cloud that exists only in the viewer cannot be downloaded. If the Core A
 ### Live check (owner)
 
 Not automated. In a real project: list files, download a real `.las` or `.e57`, and record here (a) the token scope result, (b) the download host, (c) whether `getModels("loaded")` ids are file ids, (d) the exact `/regions`, `/projects/{id}`, and `/folders/{id}/items` field names.
+
+
+## Saving the PDF (Phase 23)
+
+In the hosted shell the export dialog offers "Save to Trimble Connect" next to "Download". The browser builds the PDF with `pdf-lib`, lists the project's folders, and uploads with the parent token. The 2D Hero backend never receives the PDF, the token, or the signed upload URL.
+
+### What was verified, and where
+
+| Item | Source | Status |
+| --- | --- | --- |
+| Upload is three calls: `POST {origin}/tc/api/2.0/files/fs/initiate` with `{ parentId, parentType: "FOLDER", name }` returns `{ uploadId, uploadURL }`; `PUT uploadURL` with the bytes; `POST files/fs/commit` with `{ uploadId }` returns the file entry. | `trimble-connect-sdk` 4.0.11 `dist/es/tcps.js`, `TCPS.uploadFileContent`, and `InitUploadResponse` in `tcps_interfaces.d.ts`. | Read in the package. Not seen live. |
+| The PUT to `uploadURL` carries no `Authorization` header. | The same SDK code calls `fetch(uploadURL, { method: "PUT", body: file })`. | Read in the package. The app sends no Authorization and no cookies there. |
+| The commit reply has `id` and, per `FileEntry`, an optional `versionId`. | SDK typings. | If `versionId` is missing the app reads it from the folder listing. If it is still missing, `trimbleExport` is not recorded. |
+| A name that already exists in the folder. | Not documented in the SDK or the pages read. | **Not verified.** The app never relies on it: it lists the folder first and asks. "New version" uploads under the same name. Whether that creates version 2 of the file or a second file is a live check (below). |
+| Deleting an upload that was not committed. | No such call in the SDK. | None is used. A cancel stops before the commit, and an upload that is never committed makes no file. |
+| Size limit. | Trimble help: 5 GB per file for the browser app. | A 413 from either call shows "too large". |
+
+`fetch` gives no upload byte progress, so the dialog shows three stages: preparing, sending, finishing. Cancel aborts the request in flight and skips the commit.
+
+### Rules in the code (`integrations/trimble/upload.ts`)
+
+- The bearer goes only to Trimble Connect hosts. The signed upload URL must be `https` and is called with no Authorization header and `credentials: "omit"`.
+- The console log for a Core API call is host, path, and status. The signed URL is never logged. Error text is fixed, never copied from a response.
+- The editor and `src/pdf/` see only `PdfSaveTarget` (`src/pdf/target.ts`). `main.tsx` provides it in the hosted shell only. Local mode has no target and the dialog is unchanged.
+- The last folder is remembered per Trimble project in `localStorage` as `{ id, name }`. Nothing else.
+- A failed upload keeps the PDF bytes in the dialog. "Download" saves them without a second export. When the browser blocks the save dialog inside the iframe (`SecurityError`), `savePdf` falls back to a normal download.
+
+### Project record
+
+`PUT /api/projects/{id}/trimble-export` stores `trimbleExport` (`fileId`, `versionId`, `folderId`, `name`, `savedAt`) in `project.json`. A URL-like or token-shaped value is refused with 400. Hosted only.
+
+### Live check (owner)
+
+Not automated. In a real project: save a PDF into a folder and open it in Trimble Connect; save again with the same name, choose "new version", and see whether the file shows version 2 or a second file appears; record (a) the token scope result for uploads (a 403 means the extension token cannot write), (b) the upload host, (c) the size limit, (d) the version behaviour. If the host is blocked by the extension's content security policy, record the host.

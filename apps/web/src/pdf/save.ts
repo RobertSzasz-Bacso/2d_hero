@@ -36,10 +36,21 @@ export async function savePdf(bytes: Uint8Array, filename: string): Promise<void
     downloadPdf(bytes, filename)
     return
   }
-  const handle = await picker({
-    suggestedName: filename,
-    types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }],
-  })
+  let handle: FileHandle
+  try {
+    handle = await picker({
+      suggestedName: filename,
+      types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }],
+    })
+  } catch (error) {
+    // A page inside another site's iframe (the Trimble Connect extension) may not open the
+    // save dialog. A normal download still works there.
+    if (error instanceof DOMException && error.name === "SecurityError") {
+      downloadPdf(bytes, filename)
+      return
+    }
+    throw error
+  }
   const writable = await handle.createWritable()
   const copy = new Uint8Array(bytes.byteLength)
   copy.set(bytes)

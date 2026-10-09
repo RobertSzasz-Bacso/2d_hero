@@ -74,6 +74,23 @@ export interface FilesClient {
   listFolder(folderId: string): Promise<Listing>;
   /** A short-lived signed URL for one file version. Send it to the backend. Do not store it. */
   downloadUrl(fileId: string, versionId: string): Promise<string>;
+  /** Every folder and file in a folder, unfiltered. `null` is the project root. Used to save
+   * a PDF: the user picks a folder and a name clash is found by name. */
+  entries(folderId: string | null): Promise<Entries>;
+  /** The regional Core API origin of the project. Always a Trimble Connect host. */
+  apiOrigin(): Promise<string>;
+}
+
+export interface EntryFile {
+  id: string;
+  versionId?: string;
+  name: string;
+}
+
+export interface Entries {
+  folderId: string;
+  folders: FolderItem[];
+  files: EntryFile[];
 }
 
 export function isSupportedName(name: string): boolean {
@@ -225,12 +242,42 @@ export function createFilesClient(options: FilesClientOptions): FilesClient {
     throw failure ?? new TrimbleFilesError("not-found");
   }
 
-  async function list(folderId: string): Promise<Listing> {
+  async function items(folderId: string): Promise<unknown[]> {
     await openProject();
     const body = await get(origin as string, `/folders/${encodeURIComponent(folderId)}/items`);
     if (!Array.isArray(body)) {
       throw new TrimbleFilesError("error");
     }
+    return body;
+  }
+
+  async function entries(folderId: string | null): Promise<Entries> {
+    await openProject();
+    const id = folderId ?? (rootId as string);
+    const folders: FolderItem[] = [];
+    const found: EntryFile[] = [];
+    for (const entry of await items(id)) {
+      const item = asRecord(entry);
+      if (!item || typeof item.id !== "string" || typeof item.name !== "string") {
+        continue;
+      }
+      if (item.type === "FOLDER") {
+        folders.push({ id: item.id, name: item.name });
+      } else if (item.type === "FILE") {
+        found.push({
+          id: item.id,
+          name: item.name,
+          ...(typeof item.versionId === "string" && item.versionId ? { versionId: item.versionId } : {}),
+        });
+      }
+    }
+    folders.sort(byName);
+    found.sort(byName);
+    return { folderId: id, folders, files: found };
+  }
+
+  async function list(folderId: string): Promise<Listing> {
+    const body = await items(folderId);
     const folders: FolderItem[] = [];
     const files: FileItem[] = [];
     let hidden = 0;
@@ -265,6 +312,11 @@ export function createFilesClient(options: FilesClientOptions): FilesClient {
       return list(rootId as string);
     },
     listFolder: list,
+    entries,
+    async apiOrigin() {
+      await openProject();
+      return origin as string;
+    },
     async downloadUrl(fileId, versionId) {
       await openProject();
       const body = asRecord(

@@ -64,6 +64,7 @@ from hero.paths import app_config_dir, default_projects_dir, web_dist
 from hero.pipeline.guess import guess_source
 from hero.projects import (
     FileTooLarge,
+    InvalidTrimbleExport,
     LinkedFileMissing,
     ProjectNotFound,
     ProjectStore,
@@ -107,6 +108,16 @@ class FromUrlBody(BaseModel):
     versionId: str
     name: str | None = None
     transferId: str | None = None
+
+
+class TrimbleExportBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    fileId: str
+    versionId: str
+    folderId: str
+    name: str
+    savedAt: str
 
 
 class ProposeBody(BaseModel):
@@ -403,6 +414,19 @@ def create_app(
         if hosted is None or not transfers.cancel(transfer_id):
             return JSONResponse({"detail": "Transfer was not found."}, status_code=404)
         return JSONResponse({"state": "cancelled"})
+
+    @app.put("/api/projects/{project_id}/trimble-export")
+    def record_trimble_export(project_id: str, body: TrimbleExportBody) -> JSONResponse:
+        """Hosted only. The browser uploads the PDF itself, then tells us where it landed."""
+        if hosted is None:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        try:
+            saved = project_store().record_trimble_export(project_id, body.model_dump())
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        except InvalidTrimbleExport as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        return JSONResponse(saved)
 
     @app.post("/api/dialogs/open-file")
     def open_file_dialog() -> JSONResponse:

@@ -1,9 +1,10 @@
-import { useState } from "react"
+import { useContext, useState } from "react"
 import { Button } from "@/components/ui/button.tsx"
 import { Spinner } from "@/components/Busy.tsx"
 import { compilePlan, type Scale } from "@/drawing/compile.ts"
 import { describePdfError, savePdf } from "@/pdf/save.ts"
 import { writePdf } from "@/pdf/write.ts"
+import { PdfSaveTargetContext } from "@/pdf/target.ts"
 import type { TitleBlock } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
 import { useEditor } from "./store.ts"
@@ -18,6 +19,9 @@ export default function ExportDialog() {
   const [levelId, setLevelId] = useState(plan?.levels[0]?.id ?? "")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [ready, setReady] = useState<{ bytes: Uint8Array; filename: string } | null>(null)
+  const target = useContext(PdfSaveTargetContext)
+  const projectId = useEditor((state) => state.projectId)
 
   if (!plan) {
     return null
@@ -32,24 +36,31 @@ export default function ExportDialog() {
   })
   const smaller = compiled.nextScale
 
+  async function makePdf(): Promise<{ bytes: Uint8Array; filename: string } | null> {
+    if (!plan) {
+      return null
+    }
+    const defaults = await loadTitleDefaults()
+    const drawing = compilePlan(plan, {
+      scale,
+      tile,
+      dimensionUnit,
+      levelId: levelId || undefined,
+      hideFurniture,
+      titleDefaults: defaults,
+    })
+    return { bytes: await writePdf(drawing), filename: `${plan.project.name || "plan"}.pdf` }
+  }
+
   async function download() {
     setBusy(true)
     setError("")
     try {
-      if (!plan) {
+      const pdf = await makePdf()
+      if (!pdf) {
         return
       }
-      const defaults = await loadTitleDefaults()
-      const drawing = compilePlan(plan, {
-        scale,
-        tile,
-        dimensionUnit,
-        levelId: levelId || undefined,
-        hideFurniture,
-        titleDefaults: defaults,
-      })
-      const bytes = await writePdf(drawing)
-      await savePdf(bytes, `${plan.project.name || "plan"}.pdf`)
+      await savePdf(pdf.bytes, pdf.filename)
       setOpen(false)
     } catch (caught) {
       const message = describePdfError(caught)
@@ -61,6 +72,41 @@ export default function ExportDialog() {
     }
   }
 
+  /** Build the PDF once, then hand the bytes to the other save target. */
+  async function sendToTarget() {
+    setBusy(true)
+    setError("")
+    try {
+      const pdf = await makePdf()
+      if (pdf) {
+        setReady(pdf)
+      }
+    } catch (caught) {
+      const message = describePdfError(caught)
+      if (message) {
+        setError(message)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function downloadReady() {
+    if (!ready) {
+      return
+    }
+    try {
+      await savePdf(ready.bytes, ready.filename)
+      setReady(null)
+      setOpen(false)
+    } catch (caught) {
+      const message = describePdfError(caught)
+      if (message) {
+        setError(message)
+      }
+    }
+  }
+
   return (
     <>
       <Button type="button" variant="outline" data-testid="export-pdf" onClick={() => {
@@ -68,6 +114,7 @@ export default function ExportDialog() {
         setTile(false)
         setLevelId(plan.levels[0]?.id ?? "")
         setError("")
+        setReady(null)
         setOpen(true)
       }}>
         PDF
@@ -77,6 +124,23 @@ export default function ExportDialog() {
           <div className="w-full max-w-md rounded bg-white p-4 shadow">
             <h2 id="export-title" className="text-base font-medium">Export PDF</h2>
             <p className="mt-2 text-sm text-slate-600">A3 {plan.sheet.orientation}. Line weights are millimetres on the sheet.</p>
+            {ready && target ? (
+              <>
+                {target.render({
+                  bytes: ready.bytes,
+                  filename: ready.filename,
+                  projectId,
+                  download: downloadReady,
+                  close: () => { setReady(null); setOpen(false) },
+                })}
+                {error ? (
+                  <p role="alert" className="mt-2 text-sm text-red-700" data-testid="export-error">
+                    {error}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+            <>
             {plan.levels.length > 1 ? (
               <label className="mt-3 flex flex-col gap-1 text-sm">
                 Level
@@ -118,11 +182,25 @@ export default function ExportDialog() {
             ) : null}
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="button" data-testid="export-download" disabled={busy || (!compiled.fits && !tile)} onClick={() => void download()}>
-                {busy ? <Spinner /> : null}
-                {busy ? "Writing" : "Download"}
-              </Button>
+              {target ? (
+                <Button type="button" variant="outline" data-testid="export-download" disabled={busy || (!compiled.fits && !tile)} onClick={() => void download()}>
+                  Download
+                </Button>
+              ) : null}
+              {target ? (
+                <Button type="button" data-testid="export-target" disabled={busy || (!compiled.fits && !tile)} onClick={() => void sendToTarget()}>
+                  {busy ? <Spinner /> : null}
+                  {busy ? "Writing" : target.label}
+                </Button>
+              ) : (
+                <Button type="button" data-testid="export-download" disabled={busy || (!compiled.fits && !tile)} onClick={() => void download()}>
+                  {busy ? <Spinner /> : null}
+                  {busy ? "Writing" : "Download"}
+                </Button>
+              )}
             </div>
+            </>
+            )}
           </div>
         </div>
       ) : null}

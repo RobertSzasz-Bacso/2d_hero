@@ -65,6 +65,33 @@ class FileTooLarge(Exception):
     """The upload is above the copy limit and must be linked instead."""
 
 
+class InvalidTrimbleExport(Exception):
+    """The export record is incomplete, or a field looks like a URL or a token."""
+
+
+_EXPORT_FIELDS = ("fileId", "versionId", "folderId", "name", "savedAt")
+_EXPORT_MAX = 300
+_URL_LIKE = re.compile(r"://|[?&#]|=|\bbearer\b", re.IGNORECASE)
+_TOKEN_LIKE = re.compile(r"[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
+
+
+def validate_trimble_export(record: dict[str, str]) -> dict[str, str]:
+    """Keep only the five fields. A URL or a token-shaped value is refused, never stored."""
+    clean: dict[str, str] = {}
+    for field in _EXPORT_FIELDS:
+        value = record.get(field)
+        if not isinstance(value, str) or not value.strip() or len(value) > _EXPORT_MAX:
+            raise InvalidTrimbleExport(f"The export record needs a value for {field}.")
+        if _URL_LIKE.search(value) or _TOKEN_LIKE.search(value):
+            raise InvalidTrimbleExport(f"The export record cannot hold a URL or a token ({field}).")
+        clean[field] = value
+    try:
+        datetime.fromisoformat(clean["savedAt"])
+    except ValueError as exc:
+        raise InvalidTrimbleExport("savedAt must be an ISO date and time.") from exc
+    return clean
+
+
 class RevisionConflict(Exception):
     """If-Match does not match the plan stored on disk."""
 
@@ -172,6 +199,16 @@ class ProjectStore:
                 newest = (created, folder.name)
         return newest[1] if newest else None
 
+    def record_trimble_export(self, project_id: str, record: dict[str, str]) -> dict[str, str]:
+        """Remember the last PDF saved to Trimble Connect: ids, name, and time. No URL, no token."""
+        clean = validate_trimble_export(record)
+        folder = self.project_dir(project_id)
+        path = folder / "project.json"
+        meta = json.loads(path.read_text(encoding="utf-8"))
+        meta["trimbleExport"] = clean
+        atomic_write_text(path, json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+        return clean
+
     def read_plan(self, project_id: str) -> Plan:
         path = self.project_dir(project_id) / "plan.json"
         if not path.is_file():
@@ -200,7 +237,7 @@ class ProjectStore:
         folder = self.project_dir(project_id)
         meta = json.loads((folder / "project.json").read_text(encoding="utf-8"))
         plan = self.read_plan(project_id)
-        return {
+        described: dict[str, Any] = {
             "id": project_id,
             "name": meta["name"],
             "createdAt": meta["createdAt"],
@@ -213,6 +250,10 @@ class ProjectStore:
                 for level in plan.levels
             ],
         }
+        exported = meta.get("trimbleExport")
+        if isinstance(exported, dict):
+            described["trimbleExport"] = exported
+        return described
 
     def list_recent(self) -> list[dict[str, Any]]:
         entries = self._read_recent()

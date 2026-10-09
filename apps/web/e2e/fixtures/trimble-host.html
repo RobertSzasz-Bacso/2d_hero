@@ -39,5 +39,10 @@
       }
     </script>
     <iframe id="ext" title="2D Hero" src="http://127.0.0.1:5191/" style="width: 1200px; height: 760px; border: 0"></iframe>
+    <script>
+      // ?app=project%3Dabc opens the extension with that query, for tests that start in the editor.
+      const appQuery = new URLSearchParams(location.search).get("app")
+      if (appQuery) document.getElementById("ext").src = "http://127.0.0.1:5191/?" + appQuery
+    </script>
   </body>
 </html>

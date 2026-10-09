@@ -1,4 +1,4 @@
-﻿# 2D Hero — master plan
+# 2D Hero — master plan
 
 2D Hero is a local Windows app. It turns a 3D scan or an IFC model into a metric European construction floor plan, lets one person edit that plan, and prints it to scale as PDF.
 
@@ -39,6 +39,7 @@ Status values: `not started`, `in progress`, `done`.
 - [ ] Phase 20 — Optional machine-learning detectors — `not started`
 - [x] Phase 21 — Trimble Connect hosted integration — `done`
 - [x] Phase 22 — Open a point cloud from Trimble Connect — `done`
+- [ ] Phase 23 — Save the PDF to Trimble Connect — `in progress`
 
 ## Decisions that every phase keeps
 
@@ -1009,7 +1010,7 @@ Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-21
 
 ## Phase 22 — Open a point cloud from Trimble Connect
 
-**Status:** `not started`
+**Status:** `done`
 
 **Requires:** Phase 21 done. The `check.ps1` failures listed in `docs/handoff/phase-21.md` ("Left open") are not part of this phase.
 
@@ -1065,4 +1066,68 @@ Never log, store, or return the access token or a signed URL's query string. Enf
 Tests first, as listed under Phase 22. Run them and keep the failures before implementing.
 
 Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-22.md. Commit message: "Phase 22: Open a point cloud from Trimble Connect". Do not push.
+```
+
+---
+
+## Phase 23 — Save the PDF to Trimble Connect
+
+**Status:** `in progress`
+
+**Requires:** Phase 22 done.
+
+**Goal:** in the hosted app, exporting a PDF puts the file in the Trimble Connect project, so the user finds it next to the model. In local mode export is unchanged.
+
+**Design (verify each point in the installed `trimble-connect-workspace-api`, the `trimble-connect-sdk` typings, and Trimble's Core API docs before coding; record the result in `docs/trimble-connect.md`)**
+
+- The PDF is still built in the browser with `pdf-lib`. There is no server PDF route. The browser uploads the bytes straight to the Trimble Connect Core API with the parent token. The 2D Hero backend never receives the PDF or the token for this step.
+- The upload flow (create the upload, send the bytes, commit it) is whatever the Core API reference and SDK typings say. Do not copy it from memory. If the flow needs a signed URL on another host, that host is called without an `Authorization` header.
+- The user picks the destination folder with the Phase 22 folder navigation (folders only). The last folder is remembered per Trimble project in `localStorage` as a folder id and name only. No token, no URL.
+- The default file name is the existing export name. If a file with that name exists in the folder, the user chooses: save as a new version of it, or save with a numbered name (`Plan (2).pdf`). Do not overwrite silently. If the API cannot create a version, offer the numbered name only and say why in the handoff.
+- The export dialog in hosted mode offers "Save to Trimble Connect" as the default and "Download" as a second action. Local mode shows only the existing save path.
+- The project records the last upload (file id, version id, folder id, name, time) in project metadata, as `trimbleExport`. No URL and no token.
+- The upload shows progress, can be cancelled, and leaves no half-made file in Trimble Connect when cancelled or when it fails, if the API allows deleting an uncommitted upload. If it does not, say so in the handoff.
+
+**In**
+
+- Web: `trimble/upload.ts` for the Core API calls, behind the existing integration adapter. The editor and `src/pdf/` do not import Trimble code. They receive a `saveTarget` interface; `save.ts` stays the local implementation.
+- Web: export dialog states for hosted mode: choosing a folder, name conflict, uploading with progress, success with the file name and folder, no access (403), session ended (401), file too large, and error. A failed upload keeps the PDF in memory so the user can use "Download" instead without exporting again.
+- Project metadata field `trimbleExport`, with schema and generated types if it lives in `project.json` models.
+- Docs: `docs/trimble-connect.md` (upload endpoints, scopes, size limit, version behaviour), `docs/architecture.md` if a route or field changes, and `docs/decisions.md` for upload-from-browser and any new dependency.
+
+**Out**
+
+- Uploading anything other than the PDF (plan JSON, DXF, images, point clouds).
+- Server-side PDF generation or any backend route that carries the PDF.
+- Opening the PDF in the Trimble Connect viewer, comments, tags, or sharing links.
+- Automatic re-upload when the plan changes.
+- Creating folders in Trimble Connect.
+
+**Tests first**
+
+- Web unit: the upload module runs the create, send, and commit steps in order against a fake Core API; the bytes sent equal the PDF bytes (SHA-256); the bearer is sent only to Trimble Connect hosts and never to a signed upload host; the token and any signed URL are never written to storage, console, or an error message.
+- Web unit: a name conflict returns a conflict state and does not upload until the user chooses; "new version" and "numbered name" each produce the expected request and final name.
+- Web unit: 401, 403, 404 on the folder, 413, a network failure, and a cancel each end in the matching state, and each leaves the PDF bytes available for download. A cancel calls the delete-upload step when one exists.
+- Web unit: the remembered folder stores only folder id and name.
+- API: a project accepts and returns `trimbleExport` with file id, version id, folder id, name, and time. A value that contains a URL or a token-shaped string is rejected with 400. Local mode and old projects without the field load unchanged.
+- Playwright: the mocked parent page serves a folder list and a fake upload endpoint. In hosted mode the user exports, picks a folder, sees progress and the success message, and the fake endpoint holds a file whose bytes equal the exported PDF and whose header is `%PDF-`. In local mode the same export calls the save path and makes no Trimble request.
+- Playwright: with a conflicting name, the user chooses the numbered name and the fake endpoint holds `Plan (2).pdf`.
+- Live check (owner, not automated): a real Trimble Connect project receives the PDF in the chosen folder, opens in Trimble Connect, and a second export as a new version shows version 2. Record the token scope result, the upload host, the size limit, and whether versions are supported.
+
+**Acceptance:** in Trimble Connect, the user exports a PDF and finds it in the chosen project folder without a local download. The token never reaches the 2D Hero backend. A failed upload keeps the PDF available. Local mode is unchanged.
+
+### Prompt
+
+```text
+Implement Phase 23 of 2D Hero in C:\prod\2d_hero. One phase only. Do not start a later phase.
+
+Read first: AGENTS.md, docs/handoff/phase-22.md, master_plan.md (Phase 23), docs/trimble-connect.md, docs/architecture.md, docs/libraries.md, docs/decisions.md, .cursor/rules/secrets.mdc, .cursor/rules/web-frontend.mdc, .cursor/rules/drawing-standard.mdc.
+
+Add "Save to Trimble Connect" to the hosted export dialog. The PDF is still produced in the browser by pdf-lib. The browser uploads it to the chosen project folder through the Trimble Connect Core API with the parent token. No backend route carries the PDF or the token. Verify the upload endpoints, the version behaviour, the size limit, and whether an uncommitted upload can be deleted in the installed trimble-connect-workspace-api, the trimble-connect-sdk typings, and Trimble's official docs before coding. If the API cannot upload a file with a user token, stop and report what it returns. Do not work around it.
+
+Never log, store, or return the access token or a signed URL. Keep Trimble code behind the integration adapter and out of the editor and src/pdf. Handle a name conflict explicitly; never overwrite silently. A failed upload must leave the PDF available for download. Local mode stays unchanged. Do not mock the code you are writing; fake only the network.
+
+Tests first, as listed under Phase 23. Run them and keep the failures before implementing.
+
+Then do the closing steps in master_plan.md. Handoff file: docs/handoff/phase-23.md. Commit message: "Phase 23: Save the PDF to Trimble Connect". Do not push.
 ```
