@@ -99,7 +99,8 @@ def check_url(url: str, hosts: tuple[str, ...]) -> tuple[str, str]:
     if not host or port not in (None, 443):
         raise DownloadRejected("The download link is not valid.")
     if host not in hosts:
-        raise DownloadRejected("That download host is not allowed.")
+        # The host name is not secret (the query string is). Naming it lets the owner allow-list it.
+        raise DownloadRejected(f"That download host is not allowed: {host}")
     return host, url
 
 
