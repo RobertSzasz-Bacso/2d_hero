@@ -291,6 +291,61 @@ def test_mask_identification_uses_the_framed_overhead_view(
     assert (folder / "identification-mask.png").is_file()
 
 
+def test_mask_outside_the_room_is_sent_back_once_and_then_placed(
+    tmp_path: Path, token: str, memory_keyring
+) -> None:
+    del memory_keyring
+    from hero.ai.mask import MASK_PALETTE
+    from hero.app import create_app
+    from hero.ingest.read import read_source
+    from hero.pipeline.cloud import write_cloud
+    from hero.pipeline.normalize import normalize_scene
+
+    def mask_png(box: tuple[int, int, int, int]) -> bytes:
+        image = Image.new("RGB", (300, 240), MASK_PALETTE["floor"])
+        ImageDraw.Draw(image).rectangle(box, fill=MASK_PALETTE["toilet"])
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    far_outside = mask_png((150, 0, 299, 239))
+    inside = mask_png((0, 80, 50, 140))
+    prompts: list[str] = []
+
+    def make_mask(prompt: str, screenshot: bytes, overhead: bytes, api_key: str) -> bytes:
+        del screenshot, overhead, api_key
+        prompts.append(prompt)
+        return far_outside if len(prompts) == 1 else inside
+
+    set_cursor_key(SECRET)
+    app = create_app(
+        token=token,
+        config_dir=tmp_path / "config",
+        projects_dir=tmp_path / "projects",
+        session_file=tmp_path / ".session-token",
+        open_file=lambda: None,
+        mask=make_mask,
+    )
+    body = _shot_body()
+    body["overheadImage"] = base64.b64encode(inside).decode("ascii")
+    body["overheadFrame"] = [0.0, 0.0, 5.0, 0.0, 0.0, 3.0]
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        project_id, folder = _project(client, token, tmp_path)
+        # Measured room: x 0.125..3.925 m, y 0.125..5.875 m. The frame reaches x = 5 m.
+        write_cloud(folder / "cloud.bin", normalize_scene(read_source(tmp_path / "source.glb")))
+        response = client.post(
+            f"/api/projects/{project_id}/identify",
+            headers=_headers(token),
+            json=body,
+        )
+
+    assert response.status_code == 200
+    assert len(prompts) == 2
+    assert "is outside the room" in prompts[1]
+    assert "The interior runs from x=" in prompts[1]
+    assert response.json()["plan"]["levels"][0]["fixtures"][0]["symbol"] == "toilet"
+
+
 def test_cursor_mask_failure_returns_timeout_without_retry(
     tmp_path: Path, token: str, memory_keyring
 ) -> None:

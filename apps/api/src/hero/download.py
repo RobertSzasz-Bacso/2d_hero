@@ -32,8 +32,18 @@ silence_url_loggers()
 # The import types in docs/plan-schema.md (`format`) plus the USD variants the reader opens.
 SUPPORTED_EXTENSIONS = frozenset(
     {
-        ".obj", ".glb", ".gltf", ".usdz", ".usd", ".usda", ".usdc",
-        ".ply", ".e57", ".las", ".laz", ".ifc",
+        ".obj",
+        ".glb",
+        ".gltf",
+        ".usdz",
+        ".usd",
+        ".usda",
+        ".usdc",
+        ".ply",
+        ".e57",
+        ".las",
+        ".laz",
+        ".ifc",
     }  # fmt: skip
 )
 MAX_REDIRECTS = 3
@@ -84,6 +94,19 @@ def _is_public(address: str) -> bool:
     return parsed.is_global
 
 
+# Trimble serves signed downloads from regional hosts (eu-aws-ro, us-aws-rw, ...). They are always
+# allowed so every project file imports. One label in front is required and the match is on whole
+# labels, so look-alike names never pass. Any other host needs HERO_TRIMBLE_DOWNLOAD_HOSTS.
+TRIMBLE_FILE_SUFFIX = ".fileservice.trimblecloud.com"
+_HOST_LABEL = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def _is_trimble_file_host(host: str) -> bool:
+    if not host.endswith(TRIMBLE_FILE_SUFFIX):
+        return False
+    return _HOST_LABEL.fullmatch(host[: -len(TRIMBLE_FILE_SUFFIX)]) is not None
+
+
 def check_url(url: str, hosts: tuple[str, ...]) -> tuple[str, str]:
     """Return ``(host, url)`` for a URL that passes the static rules, else ``DownloadRejected``."""
     try:
@@ -98,7 +121,7 @@ def check_url(url: str, hosts: tuple[str, ...]) -> tuple[str, str]:
         raise DownloadRejected("The download link must not contain credentials.")
     if not host or port not in (None, 443):
         raise DownloadRejected("The download link is not valid.")
-    if host not in hosts:
+    if host not in hosts and not _is_trimble_file_host(host):
         # The host name is not secret (the query string is). Naming it lets the owner allow-list it.
         raise DownloadRejected(f"That download host is not allowed: {host}")
     return host, url
@@ -187,9 +210,7 @@ async def open_download(
     ) as client:
         response: httpx.Response | None = None
         for _hop in range(MAX_REDIRECTS + 1):
-            request = client.build_request(
-                "GET", current, headers={"Accept-Encoding": "identity"}
-            )
+            request = client.build_request("GET", current, headers={"Accept-Encoding": "identity"})
             try:
                 response = await client.send(request, stream=True)
             except httpx.HTTPError:
@@ -222,9 +243,7 @@ def declared_size(response: httpx.Response) -> int | None:
     return None
 
 
-def chunk_reader(
-    response: httpx.Response, transfer: Transfer
-) -> Callable[[int], Awaitable[bytes]]:
+def chunk_reader(response: httpx.Response, transfer: Transfer) -> Callable[[int], Awaitable[bytes]]:
     """A ``read(n)`` for ``create_from_chunks`` that counts bytes and honours cancel."""
     chunks = response.aiter_bytes()
 

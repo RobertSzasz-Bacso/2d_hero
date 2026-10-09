@@ -292,10 +292,15 @@ def _identify_from_mask(
     mask_png: bytes | None = None
     found: list[MaskFixture] | None = None
     failure = "Cursor did not return a usable mask."
+    asked = prompt
     for attempt in range(2):
         try:
-            mask_png = _png_bytes_from_result(generator(prompt, screenshot, overhead_png, api_key))
+            mask_png = _png_bytes_from_result(generator(asked, screenshot, overhead_png, api_key))
             found = decode_mask(mask_png, frame, bounds)
+            problems = outside_messages(found, bounds)
+            if problems:
+                asked = f"{prompt} {_outside_feedback(problems, bounds)}"
+                raise IdentifyError(" ".join(problems))
             break
         except ProposalError as exc:
             failure = str(exc)
@@ -314,11 +319,6 @@ def _identify_from_mask(
     atomic_write_bytes(folder / "identification-mask.png", mask_png)
     atomic_write_text(folder / "identification-reply.txt", "Cursor mask decoded.\n")
     talk.reply("Cursor mask decoded.", api_key)
-    problems = outside_messages(found, bounds)
-    if problems:
-        message = " ".join(problems)
-        talk.stopped(message, api_key)
-        raise IdentifyError(message)
     plan = store.read_plan(project_id)
     plan = _ensure_level(plan, measured[0] if measured is not None else None)
     updated = _place(plan, cast(list[ParsedFixture], found))
@@ -326,6 +326,15 @@ def _identify_from_mask(
         return store.save_plan(project_id, updated, if_match=plan.revision)
     except RevisionConflict as exc:
         raise IdentifyError("The plan changed. Try again.") from exc
+
+
+def _outside_feedback(problems: list[str], bounds: RoomBounds) -> str:
+    return (
+        f"{' '.join(problems)} The interior runs from x={bounds.min_x:.2f} m to "
+        f"x={bounds.max_x:.2f} m and from y={bounds.min_y:.2f} m to y={bounds.max_y:.2f} m. "
+        "Repaint the mask so every object's whole footprint stays inside the room. "
+        "A few centimetres past the wall is allowed."
+    )
 
 
 def _identify_from_geometry(

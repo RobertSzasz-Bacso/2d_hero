@@ -40,6 +40,28 @@ def test_underlay_png_is_a_real_image(tmp_path: Path, client, token: str) -> Non
     assert colors is None or len(colors) > 1
 
 
+def test_import_writes_one_empty_storey_at_the_floor(
+    tmp_path: Path, client, token: str
+) -> None:
+    created = client.post(
+        "/api/projects",
+        files={"file": ("building.glb", FIXTURE.read_bytes(), "application/octet-stream")},
+        headers={"X-Hero-Token": token},
+    )
+    project_id = created.json()["id"]
+    folder = tmp_path / "projects" / project_id
+    assert execute_import(str(folder), "auto", "auto")["state"] == "done"
+
+    plan = client.get(f"/api/projects/{project_id}/plan", headers={"X-Hero-Token": token}).json()
+    levels = plan["levels"]
+    assert len(levels) == 1
+    level = levels[0]
+    assert level["id"] == "L1"  # matches the underlay L1.png
+    assert abs(level["elevation"] - 0.0) <= 0.05  # the synthetic building's ground floor is 0 m
+    assert level["ceilingHeight"] > 1.5
+    assert level["walls"] == [] and level["rooms"] == [] and level["vertices"] == []
+
+
 def test_preview_glb_has_fewer_triangles_than_a_dense_source(
     tmp_path: Path, client, token: str
 ) -> None:

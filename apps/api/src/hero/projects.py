@@ -26,6 +26,9 @@ def _is_legacy_empty_import_shell(plan: Plan) -> bool:
     source = plan.detection.source
     if source is None or source.format != "glb" or not plan.levels:
         return False
+    if not plan.detection.issues:
+        # Current imports write one empty storey and no issues. Only old shells carried issues.
+        return False
     return all(
         not any(
             (

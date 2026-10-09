@@ -106,7 +106,7 @@ The picker only sends the token to `https` hosts that are `connect.trimble.com` 
 The backend enforces these in `apps/api/src/hero/download.py`.
 
 - `https` only. No credentials in the URL. Port 443 only.
-- The host must be in `HERO_TRIMBLE_DOWNLOAD_HOSTS`. There is no default. With the list empty, every request gets 400.
+- The host must be in `HERO_TRIMBLE_DOWNLOAD_HOSTS`, or be a Trimble file-service host: exactly one label plus `.fileservice.trimblecloud.com` (for example `eu-aws-ro.fileservice.trimblecloud.com`). The setting has no default list, so any other host gets 400.
 - Every address the host resolves to must be public (`ipaddress.is_global`). A literal IP in the URL is checked the same way.
 - Redirects are followed by hand, at most 3, and only to the same host. Each hop passes the same checks. A redirect to another host is 400.
 - The file name from the request must end in a type the import reads (`.obj .glb .gltf .usdz .usd .usda .usdc .ply .e57 .las .laz .ifc`). Otherwise 400.
@@ -169,3 +169,20 @@ In the hosted shell the export dialog offers "Save to Trimble Connect" next to "
 ### Live check (owner)
 
 Not automated. In a real project: save a PDF into a folder and open it in Trimble Connect; save again with the same name, choose "new version", and see whether the file shows version 2 or a second file appears; record (a) the token scope result for uploads (a 403 means the extension token cannot write), (b) the upload host, (c) the size limit, (d) the version behaviour. If the host is blocked by the extension's content security policy, record the host.
+
+## Running it on your own PC behind a Dev Tunnel
+
+Use this when your network blocks Cloudflare Tunnel. `cloudflared` connects out on port 7844 and has no flag to change that. A Microsoft Dev Tunnel connects out over HTTPS (443). No admin rights are needed on Windows. This path was written from Microsoft's documentation and has **not** been run against Trimble Connect yet.
+
+1. Install: `winget install Microsoft.devtunnel`, `uv`, Node.js, and Git. Clone the repo.
+2. Build: `cd apps\web ; npm install ; npm run build`, then `cd apps\api ; uv sync`.
+3. Create `%APPDATA%\2D Hero\hosted.env` (never in the repo) with `HERO_TRIMBLE_ISSUER`, `HERO_TRIMBLE_AUDIENCE`, `HERO_TRIMBLE_JWKS_URL`, and `HERO_TRIMBLE_DOWNLOAD_HOSTS`. The values come from the Trimble registration.
+4. Run `powershell -File scripts\hosted-devtunnel.ps1`. The first run asks you to sign in with a Microsoft or GitHub account and creates a persistent tunnel, so the public address is the same on every run. The script prints the manifest URL.
+5. A project admin adds that manifest URL in Trimble Connect under Project Settings, Extensions. Admin rights are needed only on the Trimble Connect project, and you have them on your own project.
+
+Known risks to test:
+
+- Microsoft shows a one-time anti-phishing page on the first browser visit to a tunnel address. Open the address once in the same browser and choose Continue. If the page still appears inside the Trimble Connect frame (third-party cookies blocked), the extension will not load and this route needs another host.
+- The tunnel's `Host` header must match the public address. If the server answers 400 for the host, check the printed address against `HERO_HOSTED_ALLOWED_HOSTS`.
+- Anonymous access means anyone with the address can load the page. `/api` still needs a valid Trimble token.
+- Dev Tunnels are for development. Microsoft expires an idle tunnel after 30 days.

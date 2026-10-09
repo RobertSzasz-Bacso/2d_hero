@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button.tsx"
 import { Spinner } from "@/components/Busy.tsx"
 import type { Plan } from "@/core/plan-types.ts"
 import { heroFetch } from "@/session.ts"
+import { runIdentify } from "./identifyRun.ts"
 import {
   DEFAULT_POINT_SIZE_PX,
   POINT_SIZE_MAX_PX,
@@ -147,28 +148,27 @@ export default function View3D({
     setBusy(true)
     setSent(shot.image)
     try {
-      const response = await heroFetch(`/api/projects/${projectId}/identify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { status, body } = await runIdentify(
+        projectId,
+        {
           image: shot.image,
           projection: shot.projection,
           matrixWorld: shot.matrixWorld,
           floorZ: elevation,
           overheadImage: shot.overheadImage,
           overheadFrame: shot.overheadFrame,
-        }),
-      })
-      const body = (await response.json()) as { cursorKeySet?: boolean; plan?: Plan; detail?: string }
+        },
+        heroFetch,
+      )
       if (body.cursorKeySet === false) {
         setError(body.detail || "No Cursor key is saved. Open Settings and save a key.")
         return
       }
-      if (!response.ok || !body.plan) {
+      if (status < 200 || status >= 300 || !body.plan) {
         setError(body.detail || "Cursor could not identify the furniture.")
         return
       }
-      const plan = body.plan
+      const plan = body.plan as Plan
       onPlan(plan)
       const hidden = useEditor.getState().hideFurniture
       if (hidden) {
@@ -248,7 +248,7 @@ export default function View3D({
         <div className="flex items-center gap-3">
           <Button type="button" data-testid="identify-run" disabled={busy || status !== "ready"} onClick={() => void detect()}>
             {busy ? <Spinner /> : null}
-            Detect furniture
+            Detect
           </Button>
           <p className="text-xs text-slate-300">Measures the room, draws the walls, then checks that picture with Cursor.</p>
         </div>

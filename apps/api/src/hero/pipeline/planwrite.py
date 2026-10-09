@@ -139,7 +139,7 @@ def write_shell_plan(folder: Path, result: Normalized, *, up_axis: str) -> None:
         if up_axis in {"x", "y", "z"}
         else "xyz"[int(np.argmax(np.abs(result.estimated_up)))]
     )
-    plan.levels = []
+    plan.levels = [_floor_level(result)]
     plan.detection = Detection(
         source=DetectionSource(
             filename=name,
@@ -153,6 +153,24 @@ def write_shell_plan(folder: Path, result: Normalized, *, up_axis: str) -> None:
     )
     plan.revision += 1
     atomic_write_text(plan_path, dump_plan(plan))
+
+
+def _floor_level(result: Normalized) -> Level:
+    """One empty storey (``L1``, like the first underlay) at the lowest floor of the scan."""
+    if result.levels:
+        lowest = min(result.levels, key=lambda item: item.elevation)
+        elevation, ceiling = lowest.elevation, lowest.ceiling_height
+    else:
+        # No floor found: use the lowest point along Z (normalized scenes are Z up).
+        cloud = result.mesh_vertices if result.mesh_vertices is not None else result.points
+        elevation = float(np.min(cloud[:, 2])) if len(cloud) else 0.0
+        ceiling = 2.7
+    return Level(
+        id="L1",
+        name="Level 1",
+        elevation=elevation,
+        ceilingHeight=ceiling if ceiling > 1.5 else 2.7,
+    )
 
 
 def _populated(result: Normalized, surfaces: SurfaceResult):

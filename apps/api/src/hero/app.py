@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import re
+import threading
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -638,8 +640,7 @@ def create_app(
             return JSONResponse({"detail": "No identification image yet."}, status_code=404)
         return FileResponse(path, media_type="image/png")
 
-    @app.post("/api/projects/{project_id}/identify")
-    def post_identify(project_id: str, body: IdentifyBody) -> JSONResponse:
+    def identify_once(project_id: str, body: IdentifyBody) -> tuple[int, dict[str, object]]:
         key = get_cursor_key()
         geometry_only = False
         if body.overheadImage is not None and body.overheadFrame is not None:
@@ -648,12 +649,10 @@ def create_app(
             except ProjectNotFound:
                 geometry_only = False
         if not key and not geometry_only:
-            return JSONResponse(
-                {
-                    "cursorKeySet": False,
-                    "detail": "No Cursor key is saved. Open Settings and save a key.",
-                }
-            )
+            return 200, {
+                "cursorKeySet": False,
+                "detail": "No Cursor key is saved. Open Settings and save a key.",
+            }
         try:
             plan = identify_project(
                 project_store(),
@@ -670,20 +669,86 @@ def create_app(
                 label=label,
             )
         except ProjectNotFound:
-            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+            return 404, {"detail": "Project was not found."}
         except ProposalError as exc:
             logger.info("cursor identify was not answered: %s", exc)
-            return JSONResponse({"cursorKeySet": True, "detail": str(exc)}, status_code=504)
+            return 504, {"cursorKeySet": True, "detail": str(exc)}
         except IdentifyError as exc:
             logger.info("cursor identify could not place fixtures: %s", exc)
-            return JSONResponse({"cursorKeySet": True, "detail": str(exc)})
+            return 200, {"cursorKeySet": True, "detail": str(exc)}
         except Exception:
             logger.info("cursor identify failed")
-            return JSONResponse(
-                {"cursorKeySet": True, "detail": "Cursor could not identify the furniture."}
-            )
+            return 200, {
+                "cursorKeySet": True,
+                "detail": "Cursor could not identify the furniture.",
+            }
         logger.info("cursor identify placed fixtures")
-        return JSONResponse({"cursorKeySet": True, "plan": plan.model_dump(mode="json")})
+        return 200, {"cursorKeySet": True, "plan": plan.model_dump(mode="json")}
+
+    @app.post("/api/projects/{project_id}/identify")
+    def post_identify(project_id: str, body: IdentifyBody) -> JSONResponse:
+        status, payload = identify_once(project_id, body)
+        return JSONResponse(payload, status_code=status)
+
+    identify_runs: dict[str, dict[str, object]] = {}
+    identify_lock = threading.Lock()
+
+    def run_identify(run_id: str, project_id: str, body: IdentifyBody) -> None:
+        try:
+            status, payload = identify_once(project_id, body)
+        except BaseException:
+            logger.info("cursor identify run failed")
+            status, payload = (
+                200,
+                {
+                    "cursorKeySet": True,
+                    "detail": "Cursor could not identify the furniture.",
+                },
+            )
+        with identify_lock:
+            run = identify_runs[run_id]
+            run.update({"state": "done", "status": status, "body": payload})
+            run["finished"] = time.monotonic()
+
+    @app.post("/api/projects/{project_id}/identify/start")
+    def post_identify_start(project_id: str, body: IdentifyBody) -> JSONResponse:
+        try:
+            project_store().project_dir(project_id)
+        except ProjectNotFound:
+            return JSONResponse({"detail": "Project was not found."}, status_code=404)
+        now = time.monotonic()
+        with identify_lock:
+            for stale in [
+                key
+                for key, run in identify_runs.items()
+                if run["state"] == "done" and now - float(run["finished"]) > 600  # type: ignore[arg-type]
+            ]:
+                del identify_runs[stale]
+            if any(
+                run["state"] == "running" and run["project"] == project_id
+                for run in identify_runs.values()
+            ):
+                return JSONResponse(
+                    {"detail": "Furniture detection is already running for this project."},
+                    status_code=409,
+                )
+            run_id = uuid.uuid4().hex
+            identify_runs[run_id] = {"state": "running", "project": project_id}
+        threading.Thread(target=run_identify, args=(run_id, project_id, body), daemon=True).start()
+        return JSONResponse({"id": run_id, "state": "running"})
+
+    @app.get("/api/identify/{run_id}")
+    def get_identify_run(run_id: str) -> JSONResponse:
+        with identify_lock:
+            run = identify_runs.get(run_id)
+            snapshot = dict(run) if run is not None else None
+        if snapshot is None:
+            return JSONResponse({"detail": "Unknown run."}, status_code=404)
+        if snapshot["state"] == "running":
+            return JSONResponse({"state": "running"})
+        return JSONResponse(
+            {"state": "done", "status": snapshot["status"], "body": snapshot["body"]}
+        )
 
     @app.post("/api/projects/{project_id}/identify/review")
     def post_identify_review(project_id: str, body: ReviewBody) -> JSONResponse:
