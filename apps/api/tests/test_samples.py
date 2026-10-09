@@ -7,7 +7,7 @@ import pytest
 
 from hero.samples import SampleSkipped, check_samples
 from hero.testkit.building import build_building
-from hero.testkit.writers import obj_bytes
+from hero.testkit.writers import glb_bytes
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -29,9 +29,9 @@ def test_missing_sample_file_skips_with_its_path(tmp_path: Path) -> None:
             {
                 "samples": [
                     {
-                        "file": "Duplex_A_20110907.ifc",
+                        "file": "missing.glb",
                         "source": "public",
-                        "kind": "ifc",
+                        "kind": "mesh",
                         "notes": "",
                         "levels": 2,
                         "references": [],
@@ -43,19 +43,19 @@ def test_missing_sample_file_skips_with_its_path(tmp_path: Path) -> None:
     )
     with pytest.raises(SampleSkipped) as caught:
         check_samples(folder, manifest=manifest, source="public")
-    assert str(folder / "Duplex_A_20110907.ifc") in str(caught.value)
+    assert str(folder / "missing.glb") in str(caught.value)
 
 
 def test_reference_length_matches_a_known_wall(tmp_path: Path) -> None:
     folder = tmp_path / "user"
     folder.mkdir()
-    (folder / "building.obj").write_bytes(obj_bytes(build_building(1)))
+    (folder / "building.glb").write_bytes(glb_bytes(build_building(1)))
     (folder / "manifest.json").write_text(
         json.dumps(
             {
                 "samples": [
                     {
-                        "file": "building.obj",
+                        "file": "building.glb",
                         "source": "user",
                         "kind": "mesh",
                         "notes": "South exterior centerline is 8 m.",

@@ -79,6 +79,8 @@ def test_a_pause_does_not_cut_an_unfinished_fixture_list() -> None:
     finished = partial + "}]}"
     assert _stop_for_quiet(complete=True, quiet=2.0, text=finished) is True
     assert _stop_for_quiet(complete=False, quiet=1.2, text=partial) is True
+    svg = '<svg viewBox="0 0 768 768"></svg>'
+    assert _stop_for_quiet(complete=True, quiet=2.0, text=svg, response_format="svg") is True
     long_reply = "x" * 4001
     assert _bounded_reply(long_reply, complete=True) == long_reply
     assert _bounded_reply(long_reply, complete=False).endswith("...")
@@ -289,16 +291,55 @@ def test_mask_identification_uses_the_framed_overhead_view(
     assert (folder / "identification-mask.png").is_file()
 
 
+def test_cursor_mask_failure_returns_timeout_without_retry(
+    tmp_path: Path, token: str, memory_keyring
+) -> None:
+    del memory_keyring
+    from hero.ai.session import ProposalError
+    from hero.app import create_app
+
+    calls: list[int] = []
+
+    def make_mask(prompt: str, screenshot: bytes, overhead: bytes, api_key: str) -> bytes:
+        del prompt, screenshot, overhead, api_key
+        calls.append(1)
+        raise ProposalError("Cursor did not answer.")
+
+    set_cursor_key(SECRET)
+    app = create_app(
+        token=token,
+        config_dir=tmp_path / "config",
+        projects_dir=tmp_path / "projects",
+        session_file=tmp_path / ".session-token",
+        open_file=lambda: None,
+        mask=make_mask,
+    )
+    body = _shot_body()
+    body["overheadImage"] = body["image"]
+    body["overheadFrame"] = [0.0, 0.0, 5.0, 0.0, 0.0, 3.0]
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        project_id, _folder = _project(client, token, tmp_path)
+        response = client.post(
+            f"/api/projects/{project_id}/identify",
+            headers=_headers(token),
+            json=body,
+        )
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "Cursor did not answer."
+    assert calls == [1]
+
+
 def test_identify_uses_scan_geometry_before_cursor(
     tmp_path: Path, token: str, memory_keyring
 ) -> None:
     del memory_keyring
     from hero.app import create_app
     from hero.testkit.building import build_building
-    from hero.testkit.writers import obj_bytes
+    from hero.testkit.writers import glb_bytes
 
-    source = tmp_path / "bathroom.obj"
-    source.write_bytes(obj_bytes(build_building(1, furniture="bathroom")))
+    source = tmp_path / "bathroom.glb"
+    source.write_bytes(glb_bytes(build_building(1, furniture="bathroom")))
     calls: list[str] = []
 
     def should_not_place(prompt: str, png: bytes, api_key: str) -> str:
@@ -351,10 +392,10 @@ def test_point_cloud_without_geometry_falls_back_to_cursor_mask(
     from hero.ai.mask import MASK_PALETTE
     from hero.app import create_app
     from hero.testkit.building import build_building
-    from hero.testkit.writers import obj_bytes
+    from hero.testkit.writers import glb_bytes
 
-    source = tmp_path / "bare.obj"
-    source.write_bytes(obj_bytes(build_building(1, furniture="bare")))
+    source = tmp_path / "bare.glb"
+    source.write_bytes(glb_bytes(build_building(1, furniture="bare")))
     mask_image = Image.new("RGB", (300, 240), MASK_PALETTE["floor"])
     ImageDraw.Draw(mask_image).rectangle((0, 80, 50, 140), fill=MASK_PALETTE["toilet"])
     mask_buffer = io.BytesIO()
@@ -413,10 +454,10 @@ def test_cursor_labels_ambiguous_geometry_without_changing_measurements(
     del memory_keyring
     from hero.app import create_app
     from hero.testkit.building import build_building
-    from hero.testkit.writers import obj_bytes
+    from hero.testkit.writers import glb_bytes
 
-    source = tmp_path / "block.obj"
-    source.write_bytes(obj_bytes(build_building(1, furniture="block")))
+    source = tmp_path / "block.glb"
+    source.write_bytes(glb_bytes(build_building(1, furniture="block")))
     seen: dict[str, Any] = {}
 
     def label(prompt: str, pictures: list[bytes], api_key: str) -> str:
@@ -1000,8 +1041,11 @@ def _shot_body() -> dict[str, Any]:
 
 
 def _project(client: TestClient, token: str, tmp_path: Path) -> tuple[str, Path]:
-    source = tmp_path / "note.txt"
-    source.write_text("hand", encoding="utf-8")
+    from hero.testkit.building import build_building
+    from hero.testkit.writers import glb_bytes
+
+    source = tmp_path / "source.glb"
+    source.write_bytes(glb_bytes(build_building(1, furniture="bare")))
     created = client.post(
         "/api/projects",
         json={"linkPath": str(source), "name": "Scan"},

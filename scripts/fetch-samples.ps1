@@ -6,12 +6,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $DestDir = Join-Path $Root "samples\public"
 New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
 
-$Files = @(
-  @{
-    Name = "Duplex_A_20110907.ifc"
-    Url = "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/master/IFC%202x3/Duplex%20Apartment/Duplex_A_20110907.ifc"
-  }
-)
+$Files = @()
 
 foreach ($item in $Files) {
   $dest = Join-Path $DestDir $item.Name

@@ -221,13 +221,14 @@ export default function ImportPanel({
 
   return (
     <section className="relative flex w-full max-w-lg flex-col gap-3 rounded border border-slate-200 p-4">
-      <h2 className="text-sm font-medium">{replaceExisting ? "Re-import scan" : "Import a scan"}</h2>
+      <h2 className="text-sm font-medium">{replaceExisting ? "Re-import GLB" : "Import a GLB"}</h2>
       <label className="flex cursor-pointer flex-col gap-2 rounded border border-dashed border-slate-300 p-4 text-sm">
-        Drop a file or choose one
+        Drop a GLB mesh or point cloud, or choose one
         <input
           data-testid="import-file"
           className="text-sm"
           type="file"
+          accept=".glb,model/gltf-binary"
           onChange={(event) => {
             const file = event.target.files?.[0]
             if (file) {

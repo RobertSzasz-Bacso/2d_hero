@@ -7,14 +7,11 @@ from pathlib import Path
 from hero.jobs import execute_import
 from hero.schema import blank_plan, dump_plan
 from hero.testkit.building import build_building
-from hero.testkit.writers import obj_bytes
+from hero.testkit.writers import glb_bytes
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts" / "install-shortcut.ps1"
-BAD_FILE = (
-    "This file could not be read. Export an OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, "
-    "or IFC file and try again."
-)
+BAD_FILE = "This file could not be read. Export a GLB file and try again."
 CANCELLED = "Import was cancelled. The plan was not changed."
 
 
@@ -34,8 +31,8 @@ def test_missing_linked_path_is_a_sentence(client, token: str, tmp_path: Path) -
 
 
 def test_job_missing_link_is_a_sentence(client, token: str, tmp_path: Path) -> None:
-    source = tmp_path / "scan.obj"
-    source.write_bytes(obj_bytes(build_building(1)))
+    source = tmp_path / "scan.glb"
+    source.write_bytes(glb_bytes(build_building(1)))
     created = client.post(
         "/api/projects",
         json={"linkPath": str(source), "name": "Linked"},
@@ -58,7 +55,7 @@ def test_job_missing_link_is_a_sentence(client, token: str, tmp_path: Path) -> N
 def test_bad_file_guess_is_a_sentence(client, token: str) -> None:
     created = client.post(
         "/api/projects",
-        files={"file": ("notes.obj", b"this is not a model\n", "application/octet-stream")},
+        files={"file": ("notes.glb", b"this is not a model\n", "application/octet-stream")},
         headers={"X-Hero-Token": token},
     )
     assert created.status_code == 200
@@ -75,13 +72,13 @@ def test_bad_file_guess_is_a_sentence(client, token: str) -> None:
 def test_bad_file_job_error_is_a_sentence(tmp_path: Path) -> None:
     folder = tmp_path / "project"
     folder.mkdir()
-    (folder / "source.obj").write_text("this is not a model\n", encoding="utf-8")
+    (folder / "source.glb").write_text("this is not a model\n", encoding="utf-8")
     (folder / "project.json").write_text(
         json.dumps(
             {
                 "name": "Bad",
                 "createdAt": "2026-01-01T00:00:00+00:00",
-                "sourceFileName": "source.obj",
+                "sourceFileName": "source.glb",
                 "linkedPath": None,
             }
         ),
@@ -99,13 +96,13 @@ def test_bad_file_job_error_is_a_sentence(tmp_path: Path) -> None:
 def test_cancelled_job_explains_itself(tmp_path: Path) -> None:
     folder = tmp_path / "project"
     folder.mkdir()
-    (folder / "source.obj").write_bytes(obj_bytes(build_building(1)))
+    (folder / "source.glb").write_bytes(glb_bytes(build_building(1)))
     (folder / "project.json").write_text(
         json.dumps(
             {
                 "name": "Cancel",
                 "createdAt": "2026-01-01T00:00:00+00:00",
-                "sourceFileName": "source.obj",
+                "sourceFileName": "source.glb",
                 "linkedPath": None,
             }
         ),

@@ -2,11 +2,11 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "@playwright/test"
 
-const obj = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/synthetic/building.obj")
+const glb = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/synthetic/building.glb")
 
 test("an unfinished import stays in the list and can be deleted", async ({ page }) => {
   await page.goto("/")
-  await page.getByTestId("import-file").setInputFiles(obj)
+  await page.getByTestId("import-file").setInputFiles(glb)
   await expect(page.getByTestId("guess-units")).toBeVisible()
   await page.reload()
   const unfinished = page.getByTestId("project-row").filter({ hasText: "building" }).filter({ hasText: "Not imported" })
@@ -22,7 +22,7 @@ test("an unfinished import stays in the list and can be deleted", async ({ page 
 test("an unfinished import can be resumed", async ({ page }) => {
   test.setTimeout(120_000)
   await page.goto("/")
-  await page.getByTestId("import-file").setInputFiles(obj)
+  await page.getByTestId("import-file").setInputFiles(glb)
   await expect(page.getByTestId("guess-units")).toBeVisible()
   await page.reload()
   const unfinished = page.getByTestId("project-row").filter({ hasText: "building" }).filter({ hasText: "Not imported" })

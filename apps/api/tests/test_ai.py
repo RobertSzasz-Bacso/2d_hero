@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 
 from hero.ai.agent import PlanAgent
 from hero.keystore import set_cursor_key
+from hero.testkit.building import build_building
+from hero.testkit.writers import glb_bytes
 
 SECRET = "crsr_test_key_do_not_log"
 ENV_SECRET = "crsr_env_key_do_not_use"
@@ -122,8 +124,8 @@ def _app(tmp_path: Path, token: str, agent: PlanAgent | None):
 
 
 def _project(client: TestClient, token: str, tmp_path: Path) -> tuple[str, Path]:
-    source = tmp_path / "note.txt"
-    source.write_text("hand", encoding="utf-8")
+    source = tmp_path / "source.glb"
+    source.write_bytes(glb_bytes(build_building(1, furniture="bare")))
     created = client.post(
         "/api/projects",
         json={"linkPath": str(source), "name": "AI"},

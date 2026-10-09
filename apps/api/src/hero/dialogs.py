@@ -10,7 +10,10 @@ def ask_open_file() -> str | None:
     root.withdraw()
     try:
         root.attributes("-topmost", True)
-        selected = filedialog.askopenfilename(parent=root)
+        selected = filedialog.askopenfilename(
+            parent=root,
+            filetypes=[("GLB files", "*.glb")],
+        )
     finally:
         root.destroy()
     if not selected:

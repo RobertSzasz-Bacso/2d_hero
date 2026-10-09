@@ -55,12 +55,7 @@ Each reader yields a `RawScene`: points `(N, 3)` in the file's own units and axi
 
 | Format | Reader | Notes |
 | --- | --- | --- |
-| OBJ, GLB, glTF | trimesh | Bake transforms. A scene of meshes becomes one mesh. A scene of point clouds stays points. Point-cloud glTF is Y-up. |
-| USDZ | `pxr` (`usd-core`) | Open the crate. Read `UsdGeom.Mesh`. Apply `metersPerUnit` and the full xform. Do not use regular expressions. USDA and USDC both go through `pxr`. |
-| PLY | trimesh | Mesh if it has faces, otherwise points. |
-| E57 | pye57 | Read every scan. Apply the scan translation and rotation. Skip a scan with no Cartesian points. |
-| LAS, LAZ | laspy | `chunk_iterator`. Never `points = np.array(all)`. |
-| IFC | Phase 8 may tessellate with ifcopenshell for a preview mesh. Semantic import is Phase 14 and does not use this mesh as the plan. |
+| GLB | trimesh | Bake transforms. A scene of meshes becomes one mesh. A scene of point-cloud primitives stays points. |
 
 Unit guess, before converting:
 
@@ -238,22 +233,6 @@ Width and depth may be swapped before the test. Height is the vertical extent of
 
 Unmatched clusters ≥ 0.30 m become symbol `block`, role `furniture`, confidence 0.3. A bare apartment produces an empty list.
 
-## IFC
-
-Use ifcopenshell. Convert with `ifcopenshell.util.unit.calculate_unit_scale` before any length is stored. Verify each helper against the installed package.
-
-Per `IfcBuildingStorey`:
-
-- Walls in that storey: centerline from the wall axis curve when it exists. Thickness from the material layer set total, else from the rectangular profile, else from the solid's short side. Kind from `IsExternal` when the property exists.
-- If there is no axis curve, fit the centerline to the footprint's long side and add `ifc_wall_from_solid`.
-- Doors and windows: width and height from the door/window attributes or the opening void. `offset` from the void's center projected onto the host wall. Host through the void relationship, not through a nearest-wall guess, when the relationship exists.
-- `IfcSpace`: room seed at the footprint centroid, `name` from `LongName` or `Name`.
-- Columns, stairs, and furnishing map to the same schema fields. Furnishing uses the closest symbol row by size, or `block`.
-
-When a wall has an axis, the mesh detector must not be called for that wall.
-
-Acceptance on the synthetic IFC: thickness within 0.01 m, room IoU ≥ 0.95, space names kept, millimetre files converted to metres.
-
 ## Underlay
 
 Not geometry. A PNG for the editor.
@@ -341,7 +320,7 @@ Implement these in the test kit. Detection tests call them. They do not live ins
 - **Room IoU.** Net room polygons. Greedy match by IoU. Unmatched truth rooms count as 0. The score is the mean over truth rooms. Clean ≥ 0.95. Noisy ≥ 0.85.
 - **Room dimensions.** For a rectangular truth room, width and depth of the matched net polygon within 0.02 m.
 - **Opening match.** Same kind, center distance ≤ 0.25 m, absolute width difference ≤ 0.15 m. One-to-one. Precision = matches / predicted. Recall = matches / truth. Clean precision ≥ 0.85, recall ≥ 0.90.
-- **Thickness MAE.** Mean absolute thickness error of walls whose centerlines overlap the truth. Clean ≤ 0.02 m. IFC ≤ 0.01 m.
+- **Thickness MAE.** Mean absolute thickness error of walls whose centerlines overlap the truth. Clean ≤ 0.02 m.
 - **Frame angle.** Smallest difference between `manhattanAngleDeg` values modulo 90°. Tilt test < 1°.
 - **Stair IoU.** Footprint polygons. ≥ 0.80.
 

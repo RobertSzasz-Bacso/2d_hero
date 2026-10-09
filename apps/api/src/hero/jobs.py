@@ -14,7 +14,7 @@ from hero.ingest.read import read_source
 from hero.ingest.scene import RawScene
 from hero.pipeline.cloud import write_cloud
 from hero.pipeline.normalize import normalize_scene
-from hero.pipeline.planwrite import write_imported_plan, write_shell_plan
+from hero.pipeline.planwrite import write_shell_plan
 from hero.pipeline.preview import write_preview
 from hero.pipeline.underlay import write_underlays
 from hero.projects import LinkedFileMissing
@@ -54,14 +54,9 @@ def execute_import(project_dir: str, units: str, up_axis: str) -> dict[str, str]
         if _stop(folder, "preview", 75):
             return {"state": "cancelled"}
         write_preview(source, folder, result)
-        if source.suffix.lower() == ".ifc":
-            if _stop(folder, "ifc", 90):
-                return {"state": "cancelled"}
-            write_imported_plan(folder, result, source, up_axis=up_axis)
-        else:
-            if _stop(folder, "plan", 95):
-                return {"state": "cancelled"}
-            write_shell_plan(folder, result, up_axis=up_axis)
+        if _stop(folder, "plan", 95):
+            return {"state": "cancelled"}
+        write_shell_plan(folder, result, up_axis=up_axis)
         _write_state(folder, "done", "preview", 100, "")
     except UnreadableFile:
         _write_state(folder, "error", "ingest", 0, UNREADABLE)

@@ -352,8 +352,8 @@
   },
   "detection": {
     "source": {
-      "filename": "building.obj",
-      "format": "obj",
+      "filename": "building.glb",
+      "format": "glb",
       "unitScaleToMeters": 1.0,
       "upAxis": "z",
       "manhattanAngleDeg": 0.0,

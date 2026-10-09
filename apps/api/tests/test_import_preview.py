@@ -13,14 +13,14 @@ from hero.pipeline.normalize import Normalized
 from hero.pipeline.preview import TRIANGLE_CAP, write_preview
 
 ROOT = Path(__file__).resolve().parents[3]
-FIXTURE = ROOT / "fixtures" / "synthetic" / "building.obj"
+FIXTURE = ROOT / "fixtures" / "synthetic" / "building.glb"
 USER_GLB = ROOT / "samples" / "user" / "two_social_rooms_in_a_ruined_building.glb"
 
 
 def test_underlay_png_is_a_real_image(tmp_path: Path, client, token: str) -> None:
     created = client.post(
         "/api/projects",
-        files={"file": ("building.obj", FIXTURE.read_bytes(), "application/octet-stream")},
+        files={"file": ("building.glb", FIXTURE.read_bytes(), "application/octet-stream")},
         headers={"X-Hero-Token": token},
     )
     assert created.status_code == 200
@@ -43,12 +43,12 @@ def test_underlay_png_is_a_real_image(tmp_path: Path, client, token: str) -> Non
 def test_preview_glb_has_fewer_triangles_than_a_dense_source(
     tmp_path: Path, client, token: str
 ) -> None:
-    source = tmp_path / "dense.obj"
+    source = tmp_path / "dense.glb"
     count = TRIANGLE_CAP + 8_000
     _write_grid(source, count)
     created = client.post(
         "/api/projects",
-        files={"file": ("dense.obj", source.read_bytes(), "application/octet-stream")},
+        files={"file": ("dense.glb", source.read_bytes(), "application/octet-stream")},
         headers={"X-Hero-Token": token},
     )
     assert created.status_code == 200
@@ -63,7 +63,7 @@ def test_preview_glb_has_fewer_triangles_than_a_dense_source(
         levels=[],
         manhattan_angle_deg=0.0,
     )
-    write_preview(folder / "source.obj", folder, empty)
+    write_preview(folder / "source.glb", folder, empty)
     preview = client.get(f"/api/projects/{project_id}/preview", headers={"X-Hero-Token": token})
     assert preview.status_code == 200
     loaded = cast(
@@ -75,7 +75,7 @@ def test_preview_glb_has_fewer_triangles_than_a_dense_source(
 
 
 def test_mesh_preview_uses_the_normalized_geometry_frame(tmp_path: Path) -> None:
-    source = tmp_path / "raw.obj"
+    source = tmp_path / "raw.glb"
     source.write_text(
         "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
         encoding="utf-8",

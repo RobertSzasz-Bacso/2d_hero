@@ -17,12 +17,11 @@ def guess_source(path: Path) -> dict[str, str]:
     minimum = np.array([np.inf, np.inf, np.inf])
     maximum = np.array([-np.inf, -np.inf, -np.inf])
     seen = False
-    for chunk in scene.iter_points():
-        if len(chunk) == 0:
-            continue
+    points = scene.points
+    if points is not None and len(points):
         seen = True
-        minimum = np.minimum(minimum, chunk.min(axis=0))
-        maximum = np.maximum(maximum, chunk.max(axis=0))
+        minimum = points.min(axis=0)
+        maximum = points.max(axis=0)
     if not seen:
         raise UnreadableFile()
     span = float(np.max(maximum[:2] - minimum[:2]))
@@ -35,8 +34,8 @@ def guess_source(path: Path) -> dict[str, str]:
     else:
         units = "m"
     size = maximum - minimum
-    # glTF point clouds are Y-up. A nearly cubic room makes the shortest side a bad guess.
-    if scene.source_format in {"glb", "gltf"} and not _has_faces(scene):
+    # GLB point clouds are Y-up. A nearly cubic room makes the shortest side a bad guess.
+    if scene.source_format == "glb" and not _has_faces(scene):
         axis = "y"
     else:
         axis = "xyz"[int(np.argmin(size))]

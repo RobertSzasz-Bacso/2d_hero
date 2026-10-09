@@ -101,8 +101,8 @@ def _plan(
         project=ProjectInfo(name="Synthetic", address=""),
         detection=Detection(
             source=DetectionSource(
-                filename="building.obj",
-                format="obj",
+                filename="building.glb",
+                format="glb",
                 unitScaleToMeters=unit_scale,
                 upAxis="z",
                 manhattanAngleDeg=0,

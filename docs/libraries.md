@@ -13,12 +13,8 @@ Verify the import and the function signature in the installed version before wri
 | `numpy`, `scipy` | `numpy`, `scipy` | Arrays, SVD, histograms. |
 | `shapely` v2 | `shapely` | Polygons, polygonize, buffers, IoU. |
 | `networkx` | `networkx` | Cell graph and min-cut. |
-| `trimesh` | `trimesh` | OBJ, GLB, PLY meshes, decimation, sections. |
+| `trimesh` | `trimesh` | GLB meshes and point clouds, decimation, sections. |
 | `open3d` | `open3d` | Normals, optional plane patches. Fallback is in `docs/algorithms.md`. |
-| `usd-core` | `pxr` | USDZ, including iPhone crate files. |
-| `pye57` | `pye57` | E57, including scan poses. |
-| `laspy`, `lazrs` | `laspy` | LAS and LAZ, chunked. |
-| `ifcopenshell` | `ifcopenshell` | IFC. |
 | `opencv-python-headless` | `cv2` | Elevation images and morphology. |
 | `scikit-image` | `skimage` | Only if OpenCV is a worse fit for a documented step. Prefer `cv2`. |
 | `pillow` | `PIL` | PNG underlays. |
@@ -39,7 +35,7 @@ Do not import these:
 
 | Name | Why |
 | --- | --- |
-| PDAL | Painful Windows build. LAS goes through `laspy`. |
+| PDAL | Unneeded: the app accepts GLB only. |
 | pymeshlab / MeshLab | Unreliable wheels. |
 | cairo, `cairosvg`, GTK | Native DLL on Windows. PDF is `pdf-lib` in the browser. |
 | CGAL and Python bindings | Same reason. |

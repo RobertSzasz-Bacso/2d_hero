@@ -8,7 +8,7 @@ from hero.pipeline.normalize import normalize_scene
 from hero.pipeline.planwrite import scan_plan
 from hero.schema import Plan
 from hero.testkit.building import build_building
-from hero.testkit.writers import obj_bytes
+from hero.testkit.writers import glb_bytes
 
 
 def test_bathroom_toilet_and_sink(tmp_path: Path) -> None:
@@ -62,8 +62,8 @@ def test_unknown_cluster_is_a_block(tmp_path: Path) -> None:
 
 
 def _detect(tmp_path: Path, building) -> Plan:
-    path = tmp_path / "building.obj"
-    path.write_bytes(obj_bytes(building))
+    path = tmp_path / "building.glb"
+    path.write_bytes(glb_bytes(building))
     return scan_plan(normalize_scene(read_source(path)))
 
 

@@ -69,5 +69,5 @@ Do not catch the assertion and skip.
 ## Fixtures
 
 - `fixtures/synthetic/` — small files the Phase 7 generator writes and commits.
-- `fixtures/*.obj`, `fixtures/*.ifc`, and the other files already in `fixtures/` — legacy tiny files. New tests prefer the generator. Do not delete a legacy fixture until nothing loads it.
+- `fixtures/synthetic/building.glb` and other committed fixtures — small GLB test inputs. New tests prefer the generator.
 - `samples/user/`, `samples/public/` — never required for the default run.

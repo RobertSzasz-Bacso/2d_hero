@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Any, cast
 
-import ifcopenshell
 import pytest
 import trimesh
 
@@ -22,13 +21,13 @@ ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "fixtures" / "synthetic"
 
 
-def test_same_seed_writes_the_same_obj_bytes(tmp_path: Path) -> None:
+def test_same_seed_writes_the_same_glb_bytes(tmp_path: Path) -> None:
     write_building(tmp_path / "a", seed=1)
     write_building(tmp_path / "b", seed=1)
-    first = (tmp_path / "a" / "building.obj").read_bytes()
-    second = (tmp_path / "b" / "building.obj").read_bytes()
+    first = (tmp_path / "a" / "building.glb").read_bytes()
+    second = (tmp_path / "b" / "building.glb").read_bytes()
     assert first == second
-    assert first == (FIXTURE / "building.obj").read_bytes()
+    assert first == (FIXTURE / "building.glb").read_bytes()
 
 
 def test_default_plan_matches_schema_v2() -> None:
@@ -60,23 +59,14 @@ def test_writers_produce_nontrivial_files(tmp_path: Path) -> None:
     for path in written.values():
         assert path.is_file()
         assert path.stat().st_size > 64
-    for name in ("building.obj", "building.glb", "building.ply"):
-        loaded = cast(Any, trimesh.load(written[name], force="mesh", process=False))
-        assert len(loaded.faces) > 0
-    opened = ifcopenshell.open(written["building.ifc"])
-    assert len(opened.by_type("IfcWall")) >= 1
+    loaded = cast(Any, trimesh.load(written["building.glb"], force="mesh", process=False))
+    assert len(loaded.faces) > 0
 
 
 @pytest.mark.parametrize(
     "name",
     [
-        "building.obj",
         "building.glb",
-        "building.ply",
-        "building.usdz",
-        "building.las",
-        "building.e57",
-        "building.ifc",
         "plan.json",
     ],
 )

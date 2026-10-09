@@ -76,11 +76,11 @@ def use_pipe_wait() -> Iterator[None]:
         _drain_stderr(process)
         return discovery
 
-    bridge._read_discovery = read_discovery
+    setattr(bridge, "_read_discovery", read_discovery)
     try:
         yield
     finally:
-        bridge._read_discovery = original_read
+        setattr(bridge, "_read_discovery", original_read)
 
 
 def _reply_text(reply: str) -> str:

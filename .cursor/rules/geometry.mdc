@@ -12,7 +12,7 @@ Follow `docs/algorithms.md`. If this rule and that doc disagree, the doc wins.
 - Tolerances live in one module, with the values from the doc. Do not hide a second epsilon in a function.
 - Seed every RNG. Prefer a sort key over a random sample so a rerun matches.
 - A single horizontal slice is not a wall detector. Walls come from planar patches and thickness pairing.
-- Stream LAS/LAZ and voxel-downsample. Do not load 100M points into one array.
+- Preserve the GLB point-cloud cap and voxel-downsample. Do not make unnecessary copies of a large cloud.
 - Record an issue for assumed thickness, uncertain gravity, or a gap. Do not silently invent a confident wall.
 
 ```python

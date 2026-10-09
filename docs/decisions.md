@@ -119,3 +119,8 @@ Reason: This matches architectural software: the number goes where the eye is, a
 
 Decision: Furniture detection uses the source scan's measured 3D geometry for placement, dimensions, and rotation. Cursor receives the framed view only to label ambiguous clusters; it cannot change their geometry. The color-mask path remains only as a fallback for projects without a readable geometry source.
 Reason: The Phase 13 detector already fits metric oriented boxes from the scan. The installed Cursor SDK accepts image input but does not expose the IDE's native image-generation tool or generated-file output, so generated images must not be the source of construction measurements.
+
+## 2026-10-09 — GLB-only source input
+
+Decision: Imported projects accept only `.glb` files. A GLB may contain either mesh geometry or a point cloud; both follow the same normalization and preview pipeline. Hand-drawn plans remain supported without a source file.
+Reason: The product input is intentionally narrow and predictable. Removing legacy readers and their dependencies keeps the local app smaller and avoids presenting unsupported formats in the UI.

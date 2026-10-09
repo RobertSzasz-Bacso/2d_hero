@@ -4,7 +4,7 @@ Instructions for any coding agent working in this repo. The schedule is `master_
 
 ## What this product is
 
-2D Hero turns a 3D scan or an IFC model into an editable metric floor plan and a scaled PDF. It runs on one Windows PC. The browser is the editor. Python does the heavy geometry.
+2D Hero turns a GLB mesh or point cloud into an editable metric floor plan and a scaled PDF. It runs on one Windows PC. The browser is the editor. Python does the heavy geometry.
 
 The code under `apps/` that predates Phase 1 is a prototype. Do not extend it. Phase 1 deletes it.
 
@@ -98,10 +98,10 @@ Do not push. Do not start the next phase in the same session.
 - PowerShell 5.1 does not support `&&`. Run `powershell -File scripts\test.ps1`.
 - Use `pathlib`. Do not hard-code backslashes.
 - `os.replace` is the atomic rename. Do not delete the destination first.
-- Open3D, `usd-core`, and `ifcopenshell` ship Windows wheels. If a wheel fails, paste the error into the handoff and stop. Do not replace them with PDAL, pymeshlab, or a hand-written parser.
+- Open3D and trimesh ship Windows wheels. If a wheel fails, paste the error into the handoff and stop. Do not replace them with PDAL, pymeshlab, or a hand-written parser.
 - `keyring` talks to Windows Credential Manager. Tests must inject an in-memory backend. Never write a real key from a test.
 - Playwright needs Chromium: the test script installs it. Do not switch to Firefox to hide a failure.
-- Large scans must not be read into one list. LAS/LAZ is chunked. E57 poses are applied per scan.
+- Large point-cloud GLBs must not be expanded into unnecessary copies. Preserve the existing capped/chunked normalization behavior.
 
 ## Commits
 

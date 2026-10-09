@@ -1,6 +1,5 @@
 """Turn a raw scene into a metric, Z-up, storey-split cloud."""
 
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -45,7 +44,13 @@ class Normalized:
 
 def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "auto") -> Normalized:
     """Run ingest through storeys. Points are metres, Z up."""
-    minimum, maximum = _bbox(scene.iter_points())
+    raw_points = scene.points if scene.points is not None else np.zeros((0, 3))
+    if len(raw_points):
+        minimum = raw_points.min(axis=0)
+        maximum = raw_points.max(axis=0)
+    else:
+        minimum = np.zeros(3)
+        maximum = np.zeros(3)
     span = float(np.max(maximum[:2] - minimum[:2])) if np.isfinite(minimum).all() else 0.0
     scale, guessed = _unit_scale(span, units, scene.unit_scale)
     voxel = _choose_voxel((maximum - minimum) * scale)
@@ -88,21 +93,6 @@ def normalize_scene(scene: RawScene, *, units: str = "auto", up_axis: str = "aut
     )
 
 
-def _bbox(chunks: Iterator[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-    minimum = np.array([np.inf, np.inf, np.inf])
-    maximum = np.array([-np.inf, -np.inf, -np.inf])
-    seen = False
-    for chunk in chunks:
-        if len(chunk) == 0:
-            continue
-        seen = True
-        minimum = np.minimum(minimum, chunk.min(axis=0))
-        maximum = np.maximum(maximum, chunk.max(axis=0))
-    if not seen:
-        return np.zeros(3), np.zeros(3)
-    return minimum, maximum
-
-
 def _unit_scale(span: float, units: str, hint: float | None) -> tuple[float, bool]:
     if units == "mm":
         return 0.001, True
@@ -133,11 +123,10 @@ def _downsample(
 ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
     totals: dict[tuple[int, int, int], np.ndarray] = {}
     normal_totals: dict[tuple[int, int, int], np.ndarray] = {}
-    has_normals = scene.normals is not None and scene.points is not None and scene.chunks is None
+    has_normals = scene.normals is not None and scene.points is not None
     has_colors = (
         scene.colors is not None
         and scene.points is not None
-        and scene.chunks is None
         and len(scene.colors) == len(scene.points)
     )
     color_totals: dict[tuple[int, int, int], np.ndarray] | None = {} if has_colors else None
@@ -153,9 +142,8 @@ def _downsample(
         )
     elif has_colors and scene.points is not None:
         _accumulate(scene.points * scale, None, voxel, totals, None, scene.colors, color_totals)
-    else:
-        for chunk in scene.iter_points():
-            _accumulate(chunk * scale, None, voxel, totals, None)
+    elif scene.points is not None:
+        _accumulate(scene.points * scale, None, voxel, totals, None)
     if not totals:
         return np.zeros((0, 3)), None, None
     points = np.empty((len(totals), 3), dtype=np.float64)

@@ -49,7 +49,13 @@ def ask_with_image(prompt: str, png: bytes, api_key: str) -> str:
     return _ask(message, api_key, limit_s=120.0, model=selection, complete=True)
 
 
-def ask_with_images(prompt: str, pictures: list[bytes], api_key: str) -> str:
+def ask_with_images(
+    prompt: str,
+    pictures: list[bytes],
+    api_key: str,
+    *,
+    response_format: str = "json",
+) -> str:
     """Send several pictures in one message and return the reply."""
     try:
         sdk = importlib.import_module("cursor_sdk")
@@ -59,7 +65,14 @@ def ask_with_images(prompt: str, pictures: list[bytes], api_key: str) -> str:
     message = sdk.UserMessage(text=prompt, images=images)
     selection = _vision_selection(sdk)
     logger.info("cursor image ask count=%s model=%s", len(pictures), _model_label(selection))
-    return _ask(message, api_key, limit_s=120.0, model=selection, complete=True)
+    return _ask(
+        message,
+        api_key,
+        limit_s=120.0,
+        model=selection,
+        complete=True,
+        response_format=response_format,
+    )
 
 
 def ask_mask(prompt: str, pictures: list[bytes], api_key: str) -> bytes:
@@ -71,7 +84,7 @@ def ask_mask(prompt: str, pictures: list[bytes], api_key: str) -> bytes:
     application owns the final pixels and palette.
     """
 
-    reply = ask_with_images(prompt, pictures, api_key)
+    reply = ask_with_images(prompt, pictures, api_key, response_format="svg")
     return _svg_mask_png(reply)
 
 
@@ -303,6 +316,7 @@ def _ask(
     limit_s: float,
     model: Any = _MODEL,
     complete: bool = False,
+    response_format: str = "json",
 ) -> str:
     try:
         sdk = importlib.import_module("cursor_sdk")
@@ -349,7 +363,12 @@ def _ask(
         current = len("".join(chunks))
         if current and current == previous:
             quiet += 0.2
-            if _stop_for_quiet(complete=complete, quiet=quiet, text="".join(chunks)):
+            if _stop_for_quiet(
+                complete=complete,
+                quiet=quiet,
+                text="".join(chunks),
+                response_format=response_format,
+            ):
                 break
         else:
             quiet = 0.0
@@ -385,13 +404,23 @@ def _ask(
     raise ProposalError(report) from cause
 
 
-def _stop_for_quiet(*, complete: bool, quiet: float, text: str) -> bool:
+def _stop_for_quiet(
+    *, complete: bool, quiet: float, text: str, response_format: str = "json"
+) -> bool:
     """Chat may end after a short pause. A fixture list must be closed JSON first."""
     if quiet < _QUIET_S:
         return False
     if not complete:
         return True
+    if response_format == "svg":
+        return _svg_closed(text)
     return _json_closed(text)
+
+
+def _svg_closed(text: str) -> bool:
+    start = text.find("<svg")
+    end = text.rfind("</svg>")
+    return start >= 0 and end > start
 
 
 def _json_closed(text: str) -> bool:

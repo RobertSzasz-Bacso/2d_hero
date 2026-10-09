@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from shapely.geometry import Point, Polygon
 
@@ -34,7 +34,7 @@ Correct = Callable[[str], str]
 MakeMask = Callable[[str, bytes, bytes, str], bytes]
 LabelFixtures = Callable[[str, list[bytes], str], str]
 _CORRECTIONS = 3
-_GEOMETRY_SUFFIXES = {".obj", ".glb", ".gltf", ".ply", ".e57", ".las", ".laz", ".usdz"}
+_GEOMETRY_SUFFIXES = {".glb"}
 
 _SYMBOLS = (
     "toilet",
@@ -252,7 +252,7 @@ def identify_project(
         raise IdentifyError("Cursor did not return fixture JSON.") from exc
     if measured is not None:
         plan = _apply_level(plan, measured[0])
-    updated = _place(plan, found)
+    updated = _place(plan, cast(list[ParsedFixture], found))
     try:
         return store.save_plan(project_id, updated, if_match=plan.revision)
     except RevisionConflict as exc:
@@ -300,7 +300,11 @@ def _identify_from_mask(
             mask_png = _png_bytes_from_result(generator(prompt, screenshot, overhead_png, api_key))
             found = decode_mask(mask_png, frame, bounds)
             break
-        except (IdentifyError, ProposalError, ValueError, TypeError) as exc:
+        except ProposalError as exc:
+            failure = str(exc)
+            talk.stopped(failure, api_key)
+            raise
+        except (IdentifyError, ValueError, TypeError) as exc:
             failure = str(exc)
             if attempt == 0:
                 talk.error(failure, api_key)
@@ -323,7 +327,7 @@ def _identify_from_mask(
         raise IdentifyError("This project has no storey yet.")
     if measured is not None:
         plan = _apply_level(plan, measured[0])
-    updated = _place(plan, found)
+    updated = _place(plan, cast(list[ParsedFixture], found))
     try:
         return store.save_plan(project_id, updated, if_match=plan.revision)
     except RevisionConflict as exc:
@@ -353,7 +357,7 @@ def _identify_from_geometry(
         raise IdentifyError("The source scan could not be read for furniture detection.") from exc
     detected = scan_plan(result)
     plan = store.read_plan(project_id)
-    if not plan.levels or not detected.levels:
+    if not detected.levels:
         raise IdentifyError("The scan has no storey for furniture detection.")
     if not any(level.fixtures for level in detected.levels):
         if not api_key:
@@ -370,15 +374,16 @@ def _identify_from_geometry(
             overhead_frame=overhead_frame,
             make_mask=make_mask,
         )
-    current = plan.levels[0]
+    current = plan.levels[0] if plan.levels else None
+    target_elevation = current.elevation if current is not None else detected.levels[0].elevation
     detected_level = min(
         detected.levels,
-        key=lambda level: abs(level.elevation - current.elevation),
+        key=lambda level: abs(level.elevation - target_elevation),
     )
     replacement = detected_level.model_copy(
         update={
-            "id": current.id,
-            "name": current.name,
+            "id": current.id if current is not None else detected_level.id,
+            "name": current.name if current is not None else detected_level.name,
             "fixtures": [
                 fixture
                 for fixture in detected_level.fixtures
@@ -419,8 +424,18 @@ def _identify_from_geometry(
             talk.error(str(exc), api_key)
     else:
         talk.reply("No ambiguous fixture clusters.", api_key)
+    if plan.levels:
+        levels = [replacement, *plan.levels[1:]]
+    else:
+        levels = [
+            replacement if level.id == detected_level.id else level
+            for level in detected.levels
+        ]
     updated = plan.model_copy(
-        update={"levels": [replacement, *plan.levels[1:]]},
+        update={
+            "levels": levels,
+            "detection": plan.detection.model_copy(update={"issues": detected.detection.issues}),
+        },
     )
     try:
         return store.save_plan(project_id, updated, if_match=plan.revision)

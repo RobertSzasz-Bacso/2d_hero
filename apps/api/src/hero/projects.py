@@ -12,13 +12,37 @@ from pathlib import Path
 from typing import Any
 
 from hero.atomic import atomic_write_text
+from hero.errors import UnsupportedSource
 from hero.schema import Plan, blank_plan, dump_plan
 from hero.settings_store import SettingsStore
 
 MAX_COPY_BYTES = 200 * 1024 * 1024
 _PROJECT_ID = re.compile(r"^[0-9a-f]{32}$")
-_SUFFIX = re.compile(r"\.[a-z0-9]{1,8}")
 _SNAPSHOTS = 20
+SOURCE_SUFFIX = ".glb"
+
+
+def _is_legacy_empty_import_shell(plan: Plan) -> bool:
+    source = plan.detection.source
+    if source is None or source.format != "glb" or not plan.levels:
+        return False
+    return all(
+        not any(
+            (
+                level.vertices,
+                level.walls,
+                level.openings,
+                level.columns,
+                level.stairs,
+                level.rooms,
+                level.separators,
+                level.fixtures,
+                level.texts,
+                level.dimensions,
+            )
+        )
+        for level in plan.levels
+    )
 
 
 class ProjectNotFound(Exception):
@@ -71,6 +95,8 @@ class ProjectStore:
 
     def create_linked(self, link_path: str, name: str | None = None) -> StoredProject:
         path = Path(link_path)
+        if path.suffix.lower() != SOURCE_SUFFIX:
+            raise UnsupportedSource(path.name)
         if not path.is_file():
             raise LinkedFileMissing(link_path)
         chosen = _chosen_name(name, path.stem)
@@ -122,7 +148,15 @@ class ProjectStore:
         path = self.project_dir(project_id) / "plan.json"
         if not path.is_file():
             raise ProjectNotFound(project_id)
-        return Plan.model_validate_json(path.read_text(encoding="utf-8"))
+        plan = Plan.model_validate_json(path.read_text(encoding="utf-8"))
+        if _is_legacy_empty_import_shell(plan):
+            return plan.model_copy(
+                update={
+                    "levels": [],
+                    "detection": plan.detection.model_copy(update={"issues": []}),
+                }
+            )
+        return plan
 
     def save_plan(self, project_id: str, plan: Plan, *, if_match: int) -> Plan:
         folder = self.project_dir(project_id)
@@ -282,6 +316,6 @@ def _source_names(filename: str) -> tuple[str, str]:
     if not safe or safe in {".", ".."}:
         safe = "upload.bin"
     suffix = Path(safe).suffix.lower()
-    if _SUFFIX.fullmatch(suffix) is None:
-        suffix = ".bin"
+    if suffix != SOURCE_SUFFIX:
+        raise UnsupportedSource(safe)
     return safe, suffix

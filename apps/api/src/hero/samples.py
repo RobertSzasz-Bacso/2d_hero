@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict
 
 from hero.ingest.read import read_source
 from hero.jobs import execute_import
+from hero.pipeline.normalize import normalize_scene
+from hero.pipeline.planwrite import scan_plan
 from hero.schema import Plan, blank_plan, dump_plan
 
 
@@ -105,8 +107,6 @@ def _assert_opens(path: Path) -> None:
         scene = read_source(path)
     except Exception as exc:
         raise AssertionError(f"{path} did not open: {exc}") from exc
-    if scene.chunks is not None:
-        return
     faces = scene.mesh_faces
     points = scene.points
     if faces is not None and len(faces) > 0:
@@ -134,7 +134,7 @@ def _import_plan(source: Path) -> Plan:
         if outcome.get("state") != "done":
             detail = outcome.get("error") or outcome.get("state")
             raise AssertionError(f"{source.name} did not import: {detail}")
-        return Plan.model_validate_json((folder / "plan.json").read_text(encoding="utf-8"))
+        return scan_plan(normalize_scene(read_source(target)))
 
 
 def _run_lengths(plan: Plan) -> list[float]:

@@ -1,36 +1,25 @@
-"""Readers for the formats in docs/algorithms.md. LAS stays a generator."""
+"""Reader for GLB meshes and point clouds."""
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 
+from hero.errors import UnreadableFile
 from hero.ingest.scene import RawScene
 
 
 def read_source(path: Path) -> RawScene:
-    """Open one supported file. Mesh formats are sampled onto their faces."""
-    suffix = path.suffix.lower()
-    if suffix in {".las", ".laz"}:
-        return RawScene(None, None, lambda: iter_las_chunks(path), None, suffix[1:])
-    if suffix == ".e57":
-        points = _read_e57(path)
-        return RawScene(points, None, None, None, "e57")
-    if suffix in {".usd", ".usda", ".usdc", ".usdz"}:
-        points, normals, scale = _read_usd(path)
-        return RawScene(points, normals, None, scale, "usdz")
-    if suffix == ".ifc":
-        vertices, faces = _read_ifc(path)
-        points, normals = sample_mesh(vertices, faces, _mesh_step(vertices))
-        return _scene(points, normals, None, "ifc", vertices, faces)
+    """Open one GLB mesh or point cloud."""
+    if path.suffix.lower() != ".glb":
+        raise UnreadableFile()
     vertices, faces, colors = _read_trimesh(path)
     if len(faces):
         points, normals = sample_mesh(vertices, faces, _mesh_step(vertices))
         colors = None
     else:
         points, normals = vertices, None
-    return _scene(points, normals, None, suffix[1:], vertices, faces, colors)
+    return _scene(points, normals, None, "glb", vertices, faces, colors)
 
 
 def _scene(
@@ -47,22 +36,7 @@ def _scene(
     if len(faces):
         mesh_vertices = np.asarray(vertices, dtype=np.float64)
         mesh_faces = np.asarray(faces, dtype=np.int64)
-    return RawScene(points, normals, None, scale, source_format, mesh_vertices, mesh_faces, colors)
-
-
-def iter_las_chunks(path: Path, points_per_iteration: int = 250_000) -> Iterator[np.ndarray]:
-    """Yield XYZ chunks. Never assemble the whole cloud."""
-    import laspy
-
-    with laspy.open(path) as reader:
-        for chunk in reader.chunk_iterator(points_per_iteration):
-            yield np.column_stack(
-                (
-                    np.asarray(chunk.x, dtype=np.float64),
-                    np.asarray(chunk.y, dtype=np.float64),
-                    np.asarray(chunk.z, dtype=np.float64),
-                )
-            )
+    return RawScene(points, normals, scale, source_format, mesh_vertices, mesh_faces, colors)
 
 
 def _mesh_step(vertices: np.ndarray) -> float:
@@ -187,113 +161,3 @@ def _face_count(geom: Any) -> int:
     if faces is None:
         return 0
     return len(faces)
-
-
-def _read_e57(path: Path) -> np.ndarray:
-    from pye57 import E57
-
-    blocks: list[np.ndarray] = []
-    with E57(str(path), mode="r") as handle:
-        for index in range(handle.scan_count):
-            try:
-                data = handle.read_scan(index, transform=True, ignore_missing_fields=True)
-            except Exception:
-                continue
-            if "cartesianX" not in data:
-                continue
-            block = np.column_stack(
-                (
-                    np.asarray(data["cartesianX"], dtype=np.float64),
-                    np.asarray(data["cartesianY"], dtype=np.float64),
-                    np.asarray(data["cartesianZ"], dtype=np.float64),
-                )
-            )
-            if len(block):
-                blocks.append(block)
-    if not blocks:
-        return np.zeros((0, 3))
-    return np.vstack(blocks)
-
-
-def _read_usd(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
-    from pxr import Usd, UsdGeom
-
-    usd = cast(Any, Usd)
-    geom = cast(Any, UsdGeom)
-    stage = usd.Stage.Open(str(path))
-    if stage is None:
-        raise ValueError(f"Could not open {path.name}.")
-    scale = float(geom.GetStageMetersPerUnit(stage))
-    points: list[np.ndarray] = []
-    normals: list[np.ndarray] = []
-    for prim in stage.Traverse():
-        if not prim.IsA(geom.Mesh):
-            continue
-        mesh = geom.Mesh(prim)
-        raw = mesh.GetPointsAttr().Get()
-        counts = mesh.GetFaceVertexCountsAttr().Get()
-        indices = mesh.GetFaceVertexIndicesAttr().Get()
-        if not raw or not counts or not indices:
-            continue
-        local = np.array([[point[0], point[1], point[2]] for point in raw], dtype=np.float64)
-        transform = geom.Xformable(prim).ComputeLocalToWorldTransform(usd.TimeCode.Default())
-        matrix = np.array(transform).reshape(4, 4)
-        # GfMatrix4d is row-major. Translation lives in the last row.
-        rotation = matrix[:3, :3]
-        translation = matrix[3, :3]
-        world = local @ rotation + translation
-        faces = _usd_faces(counts, indices)
-        sampled, face_normals = sample_mesh(world, faces, _mesh_step(world))
-        if len(sampled):
-            points.append(sampled)
-            normals.append(face_normals)
-    if not points:
-        return np.zeros((0, 3)), np.zeros((0, 3)), scale
-    return np.vstack(points), np.vstack(normals), scale
-
-
-def _usd_faces(counts: list[int], indices: list[int]) -> np.ndarray:
-    faces: list[list[int]] = []
-    cursor = 0
-    for count in counts:
-        polygon = list(indices[cursor : cursor + count])
-        cursor += count
-        for index in range(1, len(polygon) - 1):
-            faces.append([polygon[0], polygon[index], polygon[index + 1]])
-    if not faces:
-        return np.zeros((0, 3), dtype=np.int64)
-    return np.asarray(faces, dtype=np.int64)
-
-
-def _read_ifc(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    import ifcopenshell
-    import ifcopenshell.geom
-    import ifcopenshell.util.unit
-
-    model = ifcopenshell.open(str(path))
-    scale = float(ifcopenshell.util.unit.calculate_unit_scale(model))
-    if scale <= 0:
-        scale = 1.0
-    geometry = cast(Any, ifcopenshell.geom)
-    settings = geometry.settings()
-    settings.set("USE_WORLD_COORDS", True)
-    vertices: list[np.ndarray] = []
-    faces: list[np.ndarray] = []
-    offset = 0
-    for product in model.by_type("IfcProduct"):
-        if not product.Representation:
-            continue
-        try:
-            shape = geometry.create_shape(settings, product)
-        except Exception:
-            continue
-        verts = np.asarray(shape.geometry.verts, dtype=np.float64).reshape(-1, 3) * scale
-        tris = np.asarray(shape.geometry.faces, dtype=np.int64).reshape(-1, 3)
-        if len(verts) == 0 or len(tris) == 0:
-            continue
-        vertices.append(verts)
-        faces.append(tris + offset)
-        offset += len(verts)
-    if not vertices:
-        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64)
-    return np.vstack(vertices), np.vstack(faces)

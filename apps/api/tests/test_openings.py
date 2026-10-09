@@ -12,7 +12,7 @@ from hero.pipeline.planwrite import scan_plan
 from hero.schema import Plan
 from hero.testkit.building import build_building
 from hero.testkit.metrics import OpeningMark, opening_scores, stair_iou
-from hero.testkit.writers import obj_bytes
+from hero.testkit.writers import glb_bytes
 
 
 def test_clean_openings_match_truth(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -80,8 +80,8 @@ def test_blocked_opening_is_kept_with_low_confidence(tmp_path: Path) -> None:
 
 
 def _detect(tmp_path: Path, building) -> Plan:
-    path = tmp_path / "building.obj"
-    path.write_bytes(obj_bytes(building))
+    path = tmp_path / "building.glb"
+    path.write_bytes(glb_bytes(building))
     return scan_plan(normalize_scene(read_source(path)))
 
 

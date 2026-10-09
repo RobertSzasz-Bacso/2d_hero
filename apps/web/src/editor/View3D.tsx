@@ -16,6 +16,7 @@ import {
 } from "./point-preview.ts"
 import { useEditor } from "./store.ts"
 import { applyClipPlane, clearClip, updateCameraClip } from "./view3d-clipping.ts"
+import { floorCorners } from "./view3d-shot.ts"
 
 type ViewShot = {
   image: string
@@ -125,13 +126,25 @@ export default function View3D({
   }, [pointSize, preview, scene])
 
   async function detect() {
-    const shot = capture.current?.()
-    if (!shot || busy) {
+    if (busy) {
+      return
+    }
+    setError("")
+    setNotice("")
+    let shot: ViewShot
+    try {
+      const captured = capture.current?.()
+      if (!captured) {
+        setError("The 3D view is not ready yet.")
+        return
+      }
+      shot = captured
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ""
+      setError(message || "The 3D view could not be captured.")
       return
     }
     setBusy(true)
-    setError("")
-    setNotice("")
     setSent(shot.image)
     try {
       const response = await heroFetch(`/api/projects/${projectId}/identify`, {
@@ -345,7 +358,8 @@ function captureOverhead(
 ): { image: string; frame: number[] } {
   const floor = new THREE.Plane(new THREE.Vector3(0, 0, 1), -floorZ)
   const raycaster = new THREE.Raycaster()
-  const corners: THREE.Vector3[] = []
+  const hits: THREE.Vector3[] = []
+  const worldBounds = new THREE.Box3().setFromObject(scene)
   for (const [x, y] of [
     [-1, 1],
     [1, 1],
@@ -354,10 +368,13 @@ function captureOverhead(
   ] as const) {
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera)
     const point = raycaster.ray.intersectPlane(floor, new THREE.Vector3())
-    if (!point) {
-      throw new Error("Look down at the floor before detecting furniture.")
+    if (point) {
+      hits.push(point)
     }
-    corners.push(point)
+  }
+  const corners = floorCorners(hits, worldBounds, floorZ)
+  if (corners.length < 4) {
+    throw new Error("Look down at the floor before detecting furniture.")
   }
   const screenRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0)
   screenRight.z = 0
@@ -391,7 +408,6 @@ function captureOverhead(
     .clone()
     .addScaledVector(xAxis, width / 2)
     .addScaledVector(yAxis, height / 2)
-  const worldBounds = new THREE.Box3().setFromObject(scene)
   const topZ = Math.max(floorZ + 10, worldBounds.max.z + 10)
   const overhead = new THREE.OrthographicCamera(
     -width / 2,

@@ -171,7 +171,7 @@ describe("drawing compiler", () => {
       mkdirSync(path.dirname(golden), { recursive: true })
       writeFileSync(golden, svg)
     }
-    const expected = readFileSync(golden, "utf8")
+    const expected = readFileSync(golden, "utf8").replace(/\r\n/g, "\n")
     expect(svg).toBe(expected)
   })
 

@@ -69,24 +69,24 @@ export const systemNodes: ArchNode[] = [
   {
     id: "source",
     kicker: "Disk",
-    title: "Scan or IFC",
-    detail: "OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, IFC",
+    title: "GLB source",
+    detail: "Mesh or point cloud",
     status: "implemented",
     x: 12,
     y: 18,
     stages: [0, 1, 3],
     payload: {
       input: `{
-  "path": "Documents/2D Hero/<id>/source.las",
-  "or": { "linkedPath": "D:/scans/site.e57" },
+  "path": "Documents/2D Hero/<id>/source.glb",
+  "or": { "linkedPath": "D:/scans/site.glb" },
   "linkWhen": "file > 200 MB, or the user chooses link"
 }`,
-      transform: `Readers yield a RawScene in the file's own units and axis.
-trimesh (OBJ, GLB, PLY), pxr (USDZ), pye57 (every scan pose),
-laspy chunk_iterator (never one array), ifcopenshell (IFC).
+      transform: `The GLB reader yields a RawScene in the file's own units and axis.
+Mesh primitives are combined for detection and decimated for preview.
+Point-cloud primitives stay points and are capped for the browser.
 Span > 200 → millimetres. 50 < span ≤ 200 → centimetres. Else metres.`,
       output: `{
-  "format": "las",
+  "format": "glb",
   "unitScaleToMeters": 0.001,
   "upAxisGuess": "z",
   "issue": "units_guessed"
@@ -198,7 +198,7 @@ A running import with no live job is reported as
       transform: `A process-wide lock. A second job is 409 "A job is already running."
 ProcessPoolExecutor with one worker. Checkpoints, in order:
 ingest 10 → normalize 30 → levels 50 (cloud.bin) → underlay 70 →
-preview 75 → IFC 90, or wall surfaces 88 then wall graph 95.
+preview 75 → wall surfaces 88 → wall graph 95.
 Cancel is honoured at the next boundary. The plan is not written.
 Progress is in memory and mirrored to job.json. The browser listens on SSE.`,
       output: `{
@@ -234,32 +234,6 @@ after the wall-graph checkpoint.`,
   "noisyRoomIoU": ">= 0.85",
   "wallIoU": ">= 0.90",
   "thicknessMaeM": "<= 0.02"
-}`,
-    },
-  },
-  {
-    id: "ifc",
-    kicker: "IFC",
-    title: "Semantic import",
-    detail: "Objects, not a mesh guess",
-    status: "implemented",
-    x: 50,
-    y: 48,
-    stages: [1, 4],
-    payload: {
-      input: `{
-  "file": "model.ifc",
-  "scale": "ifcopenshell.util.unit.calculate_unit_scale"
-}`,
-      transform: `Per IfcBuildingStorey: wall axis and layer thickness, doors and
-windows through the void relationship, IfcSpace name and seed,
-columns, stairs, furnishing. A wall with an axis never calls the
-mesh detector. No axis: fit the footprint and add ifc_wall_from_solid.`,
-      output: `{
-  "thicknessErrorM": "<= 0.01",
-  "roomIoU": ">= 0.95",
-  "spaceNames": "kept",
-  "millimetreFile": "stored in metres"
 }`,
     },
   },
@@ -358,8 +332,8 @@ Autosave ~400 ms after a change, and on pointer-up. No save on pointer-move.`,
   "areas": "m²"
 }`,
       transform: `Drawing commands are compiled in the browser (ISO 128, 5457, 3098, 7200).
-pdf-lib writes the file. There is no server PDF route, and no DXF, DWG,
-or IFC export. SVG exists only as an internal snapshot for tests and
+pdf-lib writes the file. There is no server PDF route, and no DXF or DWG
+export. SVG exists only as an internal snapshot for tests and
 for the AI review image.`,
       output: `{
   "action": "Download",
@@ -433,9 +407,7 @@ export const systemEdges: ArchEdge[] = [
   { from: "api", to: "jobs", label: "enqueue", status: "implemented" },
   { from: "jobs", to: "store", label: "job.json", status: "implemented" },
   { from: "jobs", to: "detect", label: "scan", status: "implemented" },
-  { from: "jobs", to: "ifc", label: ".ifc", status: "implemented" },
   { from: "detect", to: "plan", label: "schema v2", status: "implemented" },
-  { from: "ifc", to: "plan", label: "semantics", status: "implemented" },
   { from: "ml", to: "plan", label: "validators", status: "planned" },
   { from: "plan", to: "editor", label: "GET plan", status: "implemented" },
   { from: "editor", to: "pdf", label: "pdf-lib", status: "implemented" },
@@ -457,16 +429,14 @@ export const engineNodes: ArchNode[] = [
     stages: [2],
     payload: {
       input: `{
-  "formats": ["obj", "glb", "gltf", "usdz", "ply", "e57", "las", "laz", "ifc"]
+  "formats": ["glb"]
 }`,
-      transform: `Each reader yields points in file units. USDZ goes through pxr, not a
-regex. E57 applies translation and rotation per scan. LAS/LAZ uses
-chunk_iterator. A 5 million point synthetic LAS stayed under the
-budget on this machine: tracemalloc peak 0.136 GB, 49.5 s
-(Ryzen 5 7600X, 31.1 GB). Limits are 1.5 GB and 5 minutes.`,
+      transform: `The GLB reader preserves mesh faces or point-cloud positions,
+then normalization converts coordinates to metres and Z-up. Preview
+output remains a decimated GLB or a capped point-cloud stream.`,
       output: `{
   "type": "RawScene",
-  "unreadable": "This file could not be read. Export an OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, or IFC file and try again."
+  "unreadable": "This file could not be read. Export a GLB file and try again."
 }`,
     },
   },
@@ -658,29 +628,6 @@ yields an empty list. Furniture can be hidden without hiding sanitary fixtures.`
     },
   },
   {
-    id: "ifcpath",
-    kicker: "Bypass",
-    title: "IFC objects",
-    detail: "hero.pipeline.ifcimport",
-    status: "implemented",
-    x: 60,
-    y: 78,
-    stages: [2],
-    payload: {
-      input: `{
-  "when": "source suffix is .ifc",
-  "checkpoint": "stage name \\"ifc\\" at progress 90"
-}`,
-      transform: `Semantic fields win over the mesh estimate. The mesh wall detector
-is not called for a wall that already has an axis curve. Units are
-converted before any length is stored. Two storeys become two levels.`,
-      output: `{
-  "rooms": "IfcSpace LongName → room.name",
-  "issueIfNoAxis": "ifc_wall_from_solid"
-}`,
-    },
-  },
-  {
     id: "planops",
     kicker: "Shared kernel",
     title: "planops",
@@ -768,7 +715,6 @@ export const engineEdges: ArchEdge[] = [
   { from: "cells", to: "openings", label: "graph", status: "implemented" },
   { from: "openings", to: "fixtures", label: "structure", status: "implemented" },
   { from: "fixtures", to: "planops", label: "draft", status: "implemented" },
-  { from: "ifcpath", to: "planops", label: "skip mesh", status: "implemented" },
   { from: "planops", to: "kernel", label: "same vectors", status: "implemented" },
   { from: "mlengine", to: "planops", label: "schema gate", status: "planned" },
 ];
@@ -777,15 +723,15 @@ export const stages: Stage[] = [
   {
     id: "overview",
     short: "Overview",
-    title: "A scan becomes a sheet",
+    title: "A GLB becomes a sheet",
     eyebrow: "Stage 1 · System overview",
     diagramTitle: "One PC, two owners",
     diagramNote:
       "Python owns files and detection. The browser owns the drawing, undo, and the PDF. Nothing is uploaded.",
     summary:
-      "2D Hero turns a 3D scan or an IFC model into an editable metric floor plan and a scaled PDF. It runs on one Windows machine.",
+      "2D Hero turns a GLB mesh or point cloud into an editable metric floor plan and a scaled PDF. It runs on one Windows machine.",
     purpose:
-      "The owner has real scans — phone LiDAR, Matterport-style meshes, terrestrial E57 and LAS, and IFC — and wants a European construction drawing they can correct and print. The plan stays in Documents. There are no accounts.",
+      "The owner has GLB exports — meshes and point clouds — and wants a European construction drawing they can correct and print. The plan stays in Documents. There are no accounts.",
     challenges: [
       {
         title: "A slice is not a drawing",
@@ -793,7 +739,7 @@ export const stages: Stage[] = [
       },
       {
         title: "The file may not fit in RAM",
-        body: "Sites can be large. LAS and LAZ are chunked. The target machine is 16 GB. A 100-million-point cloud is never one array.",
+        body: "Sites can be large. Point-cloud GLBs are capped and processed without unnecessary copies. The target machine is 16 GB.",
       },
       {
         title: "Two languages, one document",
@@ -811,13 +757,13 @@ export const stages: Stage[] = [
       },
       {
         title: "PDF only",
-        body: "ISO metric sheet, dimensions in centimetres, areas in square metres. No DXF, DWG, or IFC export.",
+        body: "ISO metric sheet, dimensions in centimetres, areas in square metres. No DXF or DWG export.",
       },
     ],
     statusNotes: [
       {
         status: "implemented",
-        text: "Phases 1–16 are done: shell, projects, editor, detection, IFC, assistant, shortcut, and the user guide.",
+        text: "Phases 1–16 are done: shell, projects, editor, detection, assistant, shortcut, and the user guide.",
       },
       {
         status: "planned",
@@ -834,7 +780,7 @@ export const stages: Stage[] = [
     eyebrow: "Stage 2 · Request lifecycle",
     diagramTitle: "Import, edit, propose",
     diagramNote:
-      "A scan walks the geometry worker. An IFC walks the semantic importer. Edits and accepted proposals both land as one revision.",
+      "A GLB walks the geometry worker. Edits and accepted proposals both land as one revision.",
     summary:
       "Three lifecycles share one plan file: import jobs, autosaved editor operations, and assistant proposals that are not saved until Accept.",
     purpose:
@@ -856,7 +802,7 @@ export const stages: Stage[] = [
     decisions: [
       {
         title: "Job checkpoints",
-        body: "ingest, normalize, levels, underlay, preview, then either ifc or wall surfaces and wall graph. Openings and fixtures are part of writing the detected plan.",
+        body: "ingest, normalize, levels, underlay, preview, wall surfaces, and wall graph. Openings and fixtures are part of writing the detected plan.",
       },
       {
         title: "Underlays are images",
@@ -916,14 +862,14 @@ export const stages: Stage[] = [
         body: "Sure-inside cells (floor or ceiling evidence) and the unbounded outside face bound a cut. Partitions survive because they separate two inside cells.",
       },
       {
-        title: "IFC does not re-guess",
-        body: "When a wall has an axis curve, the mesh detector is not called for that element. A test spies on that.",
+        title: "GLB stays one path",
+        body: "Mesh and point-cloud GLBs use the same normalized scene contract before detection. There is no semantic-file bypass.",
       },
     ],
     statusNotes: [
       {
         status: "implemented",
-        text: "Ingest, normalize, surfaces, cells, openings, fixtures, IFC, planops, and the TS kernel are in the tree and covered by the phase tests.",
+        text: "Ingest, normalize, surfaces, cells, openings, fixtures, planops, and the TS kernel are in the tree and covered by the phase tests.",
       },
       {
         status: "planned",
@@ -1030,7 +976,7 @@ export const stages: Stage[] = [
       },
       {
         title: "Libraries stay on a list",
-        body: "torch and tensorflow are denied in the main environment. A new package needs a line in decisions.md. PDF stays pdf-lib. LAS stays laspy.",
+        body: "torch and tensorflow are denied in the main environment. A new package needs a line in decisions.md. PDF stays pdf-lib.",
       },
       {
         title: "English, main, no push",
@@ -1040,7 +986,7 @@ export const stages: Stage[] = [
     statusNotes: [
       {
         status: "implemented",
-        text: "Working today: import and link, classic detection, IFC semantics, editor, issues, underlay, 3D preview, PDF, assistant propose/accept, shortcut.",
+        text: "Working today: GLB import and link, classic detection, editor, issues, underlay, 3D preview, PDF, assistant propose/accept, shortcut.",
       },
       {
         status: "planned",

@@ -11,7 +11,7 @@ from hero.pipeline.surfaces import detect_surfaces
 from hero.pipeline.tolerances import assumed_exterior_m, assumed_interior_m
 from hero.testkit.building import build_building
 from hero.testkit.metrics import WallSeg, thickness_mae, wall_iou
-from hero.testkit.writers import obj_bytes
+from hero.testkit.writers import glb_bytes
 
 
 def test_clean_floor_matches_truth_thickness_and_angle(
@@ -80,8 +80,8 @@ def _faces(tmp_path: Path, building):
 
 
 def _detect(tmp_path: Path, building):
-    path = tmp_path / "building.obj"
-    path.write_bytes(obj_bytes(building))
+    path = tmp_path / "building.glb"
+    path.write_bytes(glb_bytes(building))
     return detect_surfaces(normalize_scene(read_source(path)))
 
 

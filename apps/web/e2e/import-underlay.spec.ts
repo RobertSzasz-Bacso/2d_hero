@@ -2,12 +2,12 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "@playwright/test"
 
-const obj = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/synthetic/building.obj")
+const glb = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/synthetic/building.glb")
 
-test("open a synthetic OBJ, toggle the underlay, and show the 3D view", async ({ page }) => {
+test("open a synthetic GLB, toggle the underlay, and show the 3D view", async ({ page }) => {
   test.setTimeout(120_000)
   await page.goto("/")
-  await page.getByTestId("import-file").setInputFiles(obj)
+  await page.getByTestId("import-file").setInputFiles(glb)
   await expect(page.getByTestId("guess-units")).toContainText("m")
   await expect(page.getByTestId("guess-up")).toContainText("z")
   await page.getByTestId("import-start").click()

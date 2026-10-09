@@ -19,7 +19,6 @@ IssueCode = Literal[
     "room_seed_lost",
     "room_not_split",
     "low_confidence_opening",
-    "ifc_wall_from_solid",
     "missing_source",
     "ceiling_missing",
 ]
@@ -70,7 +69,7 @@ class Sheet(PlanModel):
 
 class DetectionSource(PlanModel):
     filename: str
-    format: Literal["obj", "glb", "gltf", "usdz", "ply", "e57", "las", "laz", "ifc", "hand"]
+    format: Literal["glb", "hand"]
     unitScaleToMeters: Annotated[float, Field(gt=0, allow_inf_nan=False)]
     upAxis: Literal["x", "y", "z"]
     manhattanAngleDeg: Finite

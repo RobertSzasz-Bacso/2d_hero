@@ -7,11 +7,7 @@ PHASE1_MODULES = [
     "open3d",
     "shapely",
     "cv2",
-    "laspy",
-    "pye57",
-    "ifcopenshell",
     "keyring",
-    "pxr",
 ]
 
 

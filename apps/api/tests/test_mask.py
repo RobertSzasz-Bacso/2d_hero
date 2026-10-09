@@ -72,6 +72,27 @@ def test_mask_places_wall_adjacent_fixtures_and_measures_their_full_boxes() -> N
     assert tub.depth == pytest.approx(0.60, abs=0.04)
 
 
+def test_mask_normalizes_a_camera_frame_to_the_measured_floor() -> None:
+    image = Image.new("RGB", (400, 300), (0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((50, 30, 349, 269), fill=MASK_PALETTE["floor"])
+    draw.rectangle((170, 130, 219, 189), fill=MASK_PALETTE["toilet"])
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+
+    found = decode_mask(
+        output.getvalue(),
+        MaskFrame(origin=(-3.0, -2.0), x_axis=(7.0, 0.0), y_axis=(0.0, 6.0)),
+        _bounds(),
+    )
+
+    toilet = next(item for item in found if item.symbol == "toilet")
+    assert toilet.x == pytest.approx(1.45, abs=0.04)
+    assert toilet.y == pytest.approx(1.10, abs=0.04)
+    assert toilet.width == pytest.approx(0.50, abs=0.04)
+    assert toilet.depth == pytest.approx(0.60, abs=0.04)
+
+
 def test_mask_snaps_ten_centimetres_to_wall_but_not_fifty() -> None:
     near = decode_mask(_mask(inner_gap_px=10), _frame(), _bounds())
     far = decode_mask(_mask(inner_gap_px=50), _frame(), _bounds())

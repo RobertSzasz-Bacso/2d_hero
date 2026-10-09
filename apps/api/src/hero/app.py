@@ -25,7 +25,7 @@ from hero.ai.identify import IdentifyError, has_geometry_source, identify_projec
 from hero.ai.service import accept_proposal, propose_edit, reject_proposal
 from hero.ai.session import ProposalError
 from hero.dialogs import ask_open_file
-from hero.errors import UNREADABLE, UnreadableFile
+from hero.errors import UNREADABLE, UnreadableFile, UnsupportedSource
 from hero.jobs import (
     JobBusy,
     cancel_job,
@@ -239,6 +239,8 @@ def create_app(
                 {"detail": "This file is over 200 MB. Link it instead of copying."},
                 status_code=400,
             )
+        except UnsupportedSource as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
         except JSONDecodeError:
             return JSONResponse({"detail": "Request was not valid."}, status_code=422)
         store = project_store()
@@ -489,7 +491,7 @@ def create_app(
             return JSONResponse({"detail": "Project was not found."}, status_code=404)
         except ProposalError as exc:
             logger.info("cursor identify was not answered: %s", exc)
-            return JSONResponse({"cursorKeySet": True, "detail": str(exc)})
+            return JSONResponse({"cursorKeySet": True, "detail": str(exc)}, status_code=504)
         except IdentifyError as exc:
             logger.info("cursor identify could not place fixtures: %s", exc)
             return JSONResponse({"cursorKeySet": True, "detail": str(exc)})

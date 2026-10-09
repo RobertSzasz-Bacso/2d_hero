@@ -55,7 +55,7 @@ Units are metres. `x` increases east in the project frame. `y` increases north b
 }
 ```
 
-`source` may be `null` on a hand-drawn plan. `format` is one of `obj`, `glb`, `gltf`, `usdz`, `ply`, `e57`, `las`, `laz`, `ifc`, `hand`.
+`source` may be `null` on a hand-drawn plan. For imported projects, `format` is `glb`; hand-drawn plans use `hand`.
 
 Issue:
 
@@ -68,7 +68,7 @@ Issue:
 | `levelId` | string or null |
 | `elementId` | string or null |
 
-Codes: `gravity_uncertain`, `units_guessed`, `non_manhattan`, `assumed_thickness`, `open_gap`, `uncertain_room`, `room_seed_lost`, `room_not_split`, `low_confidence_opening`, `ifc_wall_from_solid`, `missing_source`, `ceiling_missing`.
+Codes: `gravity_uncertain`, `units_guessed`, `non_manhattan`, `assumed_thickness`, `open_gap`, `uncertain_room`, `room_seed_lost`, `room_not_split`, `low_confidence_opening`, `missing_source`, `ceiling_missing`.
 
 Do not invent a code without adding it to this list in the same phase.
 

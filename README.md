@@ -1,6 +1,6 @@
 # 2D Hero
 
-2D Hero turns a 3D scan or an IFC model into an editable metric floor plan and a scaled PDF. It runs on this Windows PC. The drawing stays in your Documents folder. Nothing is uploaded.
+2D Hero turns a GLB mesh or point cloud into an editable metric floor plan and a scaled PDF. It runs on this Windows PC. The drawing stays in your Documents folder. Nothing is uploaded.
 
 ## Install
 
@@ -42,7 +42,7 @@ If the assistant panel says no key is saved, come back to this page and open Set
 
 On the home page, **Import a scan**:
 
-1. Drop a file, or press **Browse** and choose one. OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, and IFC are the formats the app reads. A file it cannot read says: "This file could not be read. Export an OBJ, GLB, USDZ, PLY, E57, LAS, LAZ, or IFC file and try again."
+1. Drop a `.glb` file, or press **Browse** and choose one. GLB files may contain a mesh or a point cloud. A file it cannot read says: "This file could not be read. Export a GLB file and try again."
 2. Check **Guessed units** and **Guessed up axis**. Change them if the guess is wrong.
 3. Press **Start import**.
 
@@ -84,12 +84,8 @@ One Windows PC. Python 3.12 does the geometry. The browser is the editor and wri
 | NumPy, SciPy | Arrays, SVD, histograms, clustering. | Voxel hashes, plane fits, storey peaks, fixture clusters. The loops stay in arrays. | A pure-Python loop over a large cloud will not fit the memory budget. |
 | Shapely | Polygons. | Wall graphs are split and polygonized. Room scores and IoU use the same faces. | CGAL. The Windows build is the reason it is not here. |
 | NetworkX | Graphs. | Inside and outside rooms are a minimum cut on the cell graph. | A small cut written for this one graph. NetworkX is already tested. |
-| Trimesh | Mesh loader. | OBJ, GLB, and PLY. Also decimation for the 3D preview and the section for the underlay. | PyMeshLab. Its Windows wheels have been unreliable. |
+| Trimesh | GLB loader. | Mesh and point-cloud GLBs, decimation for the 3D preview, and the section for the underlay. | PyMeshLab. Its Windows wheels have been unreliable. |
 | Open3D | Point-cloud tools. | Normals, and plane patches only when the installed call matches the docs. | The region grower in `docs/algorithms.md` is already the default, because it is deterministic. |
-| usd-core (`pxr`) | USD reader. | iPhone USDZ, including crate files. Transforms and metres-per-unit come from the stage. | A regex over USDA. That misses crate files and was the old prototype's bug. |
-| pye57 | E57 reader. | Terrestrial scans. Each scan pose is applied. | A partial E57 parser. Poses would be easy to drop. |
-| laspy, lazrs | LAS and LAZ. | Chunked reads. A large cloud is never one array. | PDAL. The Windows build is painful, so it is refused. |
-| IfcOpenShell | IFC toolkit. | Storeys, wall axes, doors, windows, and space names. Units go through its scale helper. | Tessellating the IFC and guessing walls. Semantic fields are the point of this path. |
 | OpenCV (headless) | Image ops. | Elevation rasters for doors and windows. A small close fills scan holes. | scikit-image, if a step is clearer there. Pillow is not a morphology library. |
 | Pillow | PNG writer. | Underlay images in the project folder. | OpenCV can write PNG too. Pillow is the small tool for that file. |
 | keyring | OS secret store. | The Cursor key goes to Windows Credential Manager. | An env var or a field in `settings.json`. Both leak into logs and into the project. |
@@ -119,7 +115,7 @@ One Windows PC. Python 3.12 does the geometry. The browser is the editor and wri
 
 These are not built. The classic pipeline stays the default either way.
 
-- **Resume a dead import from `cloud.bin`.** Today a crash marks the job interrupted and the next run reads the scan again. A large LAS should continue from the last finished stage.
+- **Resume a dead import from `cloud.bin`.** Today a crash marks the job interrupted and the next run reads the scan again. A large point-cloud GLB should continue from the last finished stage.
 - **Queue the second job.** A second import is refused while one is running. A queue of one, still a single worker, would keep the request instead of making the owner start again.
 - **Notice a changed link.** A missing linked file is already an error. A file that stayed at the same path but changed size or time should ask before the old plan is trusted.
 - **One running app.** Two Desktop shortcuts can open two processes on different ports and write one project folder. A single-instance lock would send the second launch to the window that is already open.

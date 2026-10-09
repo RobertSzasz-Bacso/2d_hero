@@ -39,6 +39,31 @@ def _client(tmp_path: Path, token: str, *, open_file=_no_dialog):
     return TestClient(app, base_url="http://127.0.0.1"), projects, config
 
 
+@pytest.mark.parametrize("suffix", [".ifc", ".obj", ".ply"])
+def test_non_glb_sources_are_rejected_without_creating_a_project(
+    tmp_path: Path, token: str, suffix: str
+) -> None:
+    source = tmp_path / f"model{suffix}"
+    source.write_bytes(b"not a GLB")
+    client, projects, _config = _client(tmp_path, token)
+    with client:
+        linked = client.post(
+            "/api/projects",
+            json={"linkPath": str(source), "name": "Unsupported"},
+            headers=_headers(token),
+        )
+        uploaded = client.post(
+            "/api/projects",
+            files={"file": (source.name, source.read_bytes(), "application/octet-stream")},
+            headers=_headers(token),
+        )
+
+    for response in (linked, uploaded):
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Only GLB files are supported."
+    assert not projects.exists() or not list(projects.iterdir())
+
+
 def test_save_reload_and_revision_conflict(tmp_path: Path, token: str) -> None:
     source = tmp_path / "scan.glb"
     source.write_bytes(b"glb")
@@ -117,6 +142,45 @@ def test_failed_replace_leaves_the_previous_plan_readable(tmp_path: Path, monkey
     assert reread == original
     assert Plan.model_validate_json(reread).project.name == "House"
     assert Plan.model_validate_json(reread).revision == 0
+
+
+def test_legacy_empty_import_shell_is_not_shown_as_a_floor_plan(tmp_path: Path) -> None:
+    from hero.projects import ProjectStore
+    from hero.schema import DetectionSource, Issue, Level, blank_plan, dump_plan
+
+    source = tmp_path / "scan.glb"
+    source.write_bytes(b"glb")
+    store = ProjectStore(projects_dir=tmp_path / "projects", config_dir=tmp_path / "config")
+    created = store.create_linked(str(source), name="House")
+    folder = store.project_dir(created.id)
+    plan = blank_plan("House")
+    plan.levels = [Level(id="L1", name="Level 1", elevation=0, ceilingHeight=2.7)]
+    plan.detection = plan.detection.model_copy(
+        update={
+            "source": DetectionSource(
+                filename="scan.glb",
+                format="glb",
+                unitScaleToMeters=1,
+                upAxis="z",
+                manhattanAngleDeg=0,
+                linked=True,
+            ),
+            "issues": [
+                Issue(
+                    id="issue-1",
+                    severity="warning",
+                    code="ceiling_missing",
+                    message="No ceiling was found.",
+                )
+            ],
+        }
+    )
+    (folder / "plan.json").write_text(dump_plan(plan), encoding="utf-8")
+
+    cleaned = store.read_plan(created.id)
+
+    assert cleaned.levels == []
+    assert cleaned.detection.issues == []
 
 
 def test_previous_plan_and_twenty_snapshots(tmp_path: Path, token: str) -> None:
@@ -202,7 +266,7 @@ def test_upload_over_200_mb_is_rejected_without_a_copy(
     with client:
         created = client.post(
             "/api/projects",
-            files={"file": ("big.laz", b"12345", "application/octet-stream")},
+                files={"file": ("big.glb", b"12345", "application/octet-stream")},
             headers=_headers(token),
         )
         assert created.status_code == 400
@@ -231,8 +295,8 @@ def test_missing_link_is_400(tmp_path: Path, token: str) -> None:
 
 
 def test_open_file_dialog_returns_the_stubbed_path(tmp_path: Path, token: str) -> None:
-    chosen = tmp_path / "scan.e57"
-    chosen.write_bytes(b"e57")
+    chosen = tmp_path / "scan.glb"
+    chosen.write_bytes(b"glb")
     client, _projects, _config = _client(tmp_path, token, open_file=lambda: str(chosen))
     with client:
         opened = client.post("/api/dialogs/open-file", headers=_headers(token))
@@ -269,7 +333,7 @@ def test_delete_unknown_project_is_404(tmp_path: Path, token: str) -> None:
 
 
 def test_delete_is_refused_while_an_import_is_running(tmp_path: Path, token: str) -> None:
-    source = ROOT / "fixtures" / "synthetic" / "building.obj"
+    source = ROOT / "fixtures" / "synthetic" / "building.glb"
     client, projects, _config = _client(tmp_path, token)
     with client:
         created = client.post(

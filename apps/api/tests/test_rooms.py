@@ -14,7 +14,7 @@ from hero.planops.rooms import extract_rooms
 from hero.schema import Plan
 from hero.testkit.building import build_building
 from hero.testkit.metrics import WallSeg, room_iou, wall_iou
-from hero.testkit.writers import obj_bytes
+from hero.testkit.writers import glb_bytes
 
 
 def test_clean_apartment_rooms_and_walls(tmp_path: Path,
@@ -53,8 +53,8 @@ def test_noisy_apartment_keeps_room_iou(tmp_path: Path, capsys: pytest.CaptureFi
 
 
 def _detect(tmp_path: Path, building):
-    path = tmp_path / "building.obj"
-    path.write_bytes(obj_bytes(building))
+    path = tmp_path / "building.glb"
+    path.write_bytes(glb_bytes(building))
     normalized = normalize_scene(read_source(path))
     surfaces = detect_surfaces(normalized)
     drafts = draft_levels(normalized, surfaces.faces)
