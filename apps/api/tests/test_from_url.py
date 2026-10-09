@@ -16,9 +16,9 @@ from typing import Any, cast
 
 import httpx
 import jwt
-import laspy
 import numpy as np
 import pytest
+import trimesh
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
@@ -49,27 +49,23 @@ def signing_key() -> rsa.RSAPrivateKey:
 
 
 @pytest.fixture(scope="module")
-def las_bytes(tmp_path_factory: pytest.TempPathFactory) -> bytes:
-    """A LAS of at least 5 MB: the synthetic building, repeated with seeded jitter."""
+def scan_bytes() -> bytes:
+    """A GLB of at least 5 MB: the synthetic building tiled on a grid, 50 m apart."""
     building = build_building(1)
-    rng = np.random.default_rng(22)
-    base = building.vertices
-    count = FIVE_MB // 20 + 4096
-    picks = rng.integers(0, len(base), size=count)
-    points = base[picks] + rng.normal(0.0, 0.002, size=(count, 3))
-    header = laspy.LasHeader(point_format=0, version="1.2")
-    header.scales = np.array([0.001, 0.001, 0.001])
-    header.offsets = points.min(axis=0)
-    cloud = laspy.LasData(header)
-    cloud.x = points[:, 0]
-    cloud.y = points[:, 1]
-    cloud.z = points[:, 2]
-    path = tmp_path_factory.mktemp("las") / "scan.las"
-    cast(Any, cloud).write(path)
-    data = path.read_bytes()
+    one = trimesh.Trimesh(vertices=building.vertices, faces=building.faces, process=False)
+    per_tile = len(cast(bytes, one.export(file_type="glb")))
+    count = int(FIVE_MB / per_tile * 1.2) + 1
+    tiles = [
+        trimesh.Trimesh(
+            vertices=building.vertices + np.array([(index % 10) * 50.0, (index // 10) * 50.0, 0.0]),
+            faces=building.faces,
+            process=False,
+        )
+        for index in range(count)
+    ]
+    data = cast(bytes, trimesh.util.concatenate(tiles).export(file_type="glb"))
     assert len(data) >= FIVE_MB
     return data
-
 
 def make_token(key: rsa.RSAPrivateKey) -> str:
     now = int(time.time())
@@ -127,7 +123,7 @@ def serve(data: bytes, seen: list[httpx.Request] | None = None) -> Handler:
     def handler(request: httpx.Request) -> httpx.Response:
         if seen is not None:
             seen.append(request)
-        return httpx.Response(200, content=data, headers={"Content-Type": "application/x-las"})
+        return httpx.Response(200, content=data, headers={"Content-Type": "model/gltf-binary"})
 
     return handler
 
@@ -135,7 +131,7 @@ def serve(data: bytes, seen: list[httpx.Request] | None = None) -> Handler:
 def body(url: str = URL, **extra: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "url": url,
-        "fileName": "Level 1 scan.las",
+        "fileName": "Level 1 scan.glb",
         "fileId": "file-123",
         "versionId": "ver-9",
     }
@@ -145,9 +141,9 @@ def body(url: str = URL, **extra: object) -> dict[str, object]:
 
 @pytest.fixture
 def hosted(
-    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
 ) -> Iterator[TestClient]:
-    with build(tmp_path, signing_key, serve(las_bytes)) as client:
+    with build(tmp_path, signing_key, serve(scan_bytes)) as client:
         yield client
 
 
@@ -321,12 +317,12 @@ def test_malformed_body_is_422(hosted: TestClient, signing_key: rsa.RSAPrivateKe
 # --- a good download ------------------------------------------------------
 
 
-def test_five_megabyte_las_becomes_a_project_that_imports(
-    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+def test_five_megabyte_glb_becomes_a_project_that_imports(
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
 ) -> None:
     seen: list[httpx.Request] = []
     token = make_token(signing_key)
-    with build(tmp_path, signing_key, serve(las_bytes, seen)) as client:
+    with build(tmp_path, signing_key, serve(scan_bytes, seen)) as client:
         response = client.post(
             "/api/projects/from-url",
             json=body(name="Level 1"),
@@ -339,19 +335,19 @@ def test_five_megabyte_las_becomes_a_project_that_imports(
         assert fetched.status_code == 200
 
     folder = tmp_path / "projects" / project["id"]
-    stored = (folder / "source.las").read_bytes()
+    stored = (folder / "source.glb").read_bytes()
     assert len(stored) >= FIVE_MB
-    assert hashlib.sha256(stored).hexdigest() == hashlib.sha256(las_bytes).hexdigest()
+    assert hashlib.sha256(stored).hexdigest() == hashlib.sha256(scan_bytes).hexdigest()
     assert list(folder.glob("*.part")) == []
 
     meta = json.loads((folder / "project.json").read_text(encoding="utf-8"))
     assert meta["name"] == "Level 1"
-    assert meta["sourceFileName"] == "Level 1 scan.las"
+    assert meta["sourceFileName"] == "Level 1 scan.glb"
     assert meta["linkedPath"] is None
     assert meta["trimbleSource"] == {
         "fileId": "file-123",
         "versionId": "ver-9",
-        "name": "Level 1 scan.las",
+        "name": "Level 1 scan.glb",
     }
     assert SIGNATURE not in json.dumps(meta)
 
@@ -364,13 +360,48 @@ def test_five_megabyte_las_becomes_a_project_that_imports(
     assert outcome["state"] == "done"
 
 
+def test_same_file_version_is_reused_without_a_second_download(
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
+) -> None:
+    seen: list[httpx.Request] = []
+    token = make_token(signing_key)
+    with build(tmp_path, signing_key, serve(scan_bytes, seen)) as client:
+        first = client.post("/api/projects/from-url", json=body(), headers=bearer(token))
+        second = client.post("/api/projects/from-url", json=body(), headers=bearer(token))
+
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        assert second.json()["id"] == first.json()["id"]
+        assert len(seen) == 1
+        assert len(project_folders(tmp_path)) == 1
+
+
+def test_new_version_or_other_file_is_downloaded_again(
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
+) -> None:
+    seen: list[httpx.Request] = []
+    token = make_token(signing_key)
+    with build(tmp_path, signing_key, serve(scan_bytes, seen)) as client:
+        client.post("/api/projects/from-url", json=body(), headers=bearer(token))
+        newer = client.post(
+            "/api/projects/from-url", json=body(versionId="ver-10"), headers=bearer(token)
+        )
+        other = client.post(
+            "/api/projects/from-url", json=body(fileId="file-456"), headers=bearer(token)
+        )
+
+        assert newer.status_code == 200 and other.status_code == 200
+        assert len(seen) == 3
+        assert len(project_folders(tmp_path)) == 3
+
+
 def test_same_host_redirect_is_followed(
-    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/blobs/scan":
             return httpx.Response(302, headers={"Location": "/blobs/final?part=2"})
-        return httpx.Response(200, content=las_bytes)
+        return httpx.Response(200, content=scan_bytes)
 
     with build(tmp_path, signing_key, handler) as client:
         response = client.post(
@@ -384,10 +415,10 @@ def test_same_host_redirect_is_followed(
 
 
 def test_failed_download_leaves_no_file_and_no_project(
-    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
 ) -> None:
     async def broken() -> AsyncIterator[bytes]:
-        yield las_bytes[: 1024 * 1024]
+        yield scan_bytes[: 1024 * 1024]
         raise httpx.ReadError("connection dropped")
 
     def handler(_request: httpx.Request) -> httpx.Response:
@@ -418,7 +449,7 @@ def test_remote_error_status_is_502(tmp_path: Path, signing_key: rsa.RSAPrivateK
 
 
 def test_cancelled_download_leaves_no_file_and_no_project(
-    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
 ) -> None:
     started = threading.Event()
     transfer = "a" * 32
@@ -426,7 +457,7 @@ def test_cancelled_download_leaves_no_file_and_no_project(
     async def slow() -> AsyncIterator[bytes]:
         offset = 0
         for _ in range(400):
-            yield las_bytes[offset : offset + 65536]
+            yield scan_bytes[offset : offset + 65536]
             offset += 65536
             if offset >= 3 * 65536:
                 started.set()
@@ -499,11 +530,11 @@ def test_declared_size_over_the_limit_is_413_and_not_read(
 
 
 def test_streamed_size_over_the_limit_is_413_and_removed(
-    tmp_path: Path, signing_key: rsa.RSAPrivateKey, las_bytes: bytes
+    tmp_path: Path, signing_key: rsa.RSAPrivateKey, scan_bytes: bytes
 ) -> None:
     async def endless() -> AsyncIterator[bytes]:
-        for offset in range(0, len(las_bytes), 65536):
-            yield las_bytes[offset : offset + 65536]
+        for offset in range(0, len(scan_bytes), 65536):
+            yield scan_bytes[offset : offset + 65536]
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=endless())
@@ -531,7 +562,7 @@ def test_local_copy_limit_is_unchanged() -> None:
 def test_url_query_and_bearer_never_reach_logs_responses_or_disk(
     tmp_path: Path,
     signing_key: rsa.RSAPrivateKey,
-    las_bytes: bytes,
+    scan_bytes: bytes,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     token = make_token(signing_key)
@@ -541,7 +572,7 @@ def test_url_query_and_bearer_never_reach_logs_responses_or_disk(
     def flaky(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/blobs/missing":
             return httpx.Response(404, content=b"gone")
-        return httpx.Response(200, content=las_bytes)
+        return httpx.Response(200, content=scan_bytes)
 
     with build(tmp_path, signing_key, flaky) as client:
         with caplog.at_level(logging.DEBUG):

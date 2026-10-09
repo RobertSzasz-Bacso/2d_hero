@@ -150,6 +150,28 @@ class ProjectStore:
             raise
         return StoredProject(id=project_id)
 
+    def find_trimble(self, file_id: str, version_id: str) -> str | None:
+        """Project already downloaded from this Trimble file version, if its source is on disk."""
+        if not self.projects_dir.is_dir():
+            return None
+        newest: tuple[str, str] | None = None
+        for folder in self.projects_dir.iterdir():
+            try:
+                meta = json.loads((folder / "project.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            source = meta.get("trimbleSource") if isinstance(meta, dict) else None
+            if not isinstance(source, dict):
+                continue
+            if source.get("fileId") != file_id or source.get("versionId") != version_id:
+                continue
+            if not (folder / f"source{SOURCE_SUFFIX}").is_file():
+                continue
+            created = str(meta.get("createdAt", ""))
+            if newest is None or created > newest[0]:
+                newest = (created, folder.name)
+        return newest[1] if newest else None
+
     def read_plan(self, project_id: str) -> Plan:
         path = self.project_dir(project_id) / "plan.json"
         if not path.is_file():

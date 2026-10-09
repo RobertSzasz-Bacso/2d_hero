@@ -159,6 +159,7 @@ export default function App({
       <AssistantPanel />
       {hostedImport?.(openImport)}
       <ImportPanel onOpen={openProject} />
+      {hostedImport ? null : (
       <section className="flex w-full max-w-lg flex-col gap-2">
         <h2 className="text-sm font-medium">Projects</h2>
         {projectsState === "loading" ? (
@@ -206,6 +207,7 @@ export default function App({
           )
         })}
       </section>
+      )}
       <Settings />
     </main>
   )

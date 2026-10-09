@@ -339,6 +339,13 @@ def create_app(
             transfer = transfers.begin(transfer_id)
         except DownloadRejected as exc:
             return JSONResponse({"detail": str(exc)}, status_code=400)
+
+        # The same file version is already on disk: skip the download.
+        existing = project_store().find_trimble(body.fileId, body.versionId)
+        if existing is not None:
+            transfers.end(transfer_id)
+            store = project_store()
+            return JSONResponse(_with_import_status(store, store.describe(existing)))
         try:
             async with open_download(
                 body.url,
